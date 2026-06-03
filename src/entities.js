@@ -22,7 +22,7 @@ class Entity {
         this.defense = stats.defense || 0;
         this.range = stats.range || 30;
         this.cooldown = stats.cooldown || 60;
-        
+
         this.color = stats.color || "#ffffff";
         this.bloodColor = stats.bloodColor || "#c0392b"; // По дефолту красная кровь
         this.scale = stats.scale || 1.0;
@@ -51,20 +51,20 @@ class Entity {
         // Спавним частицы крови
         if (particleEngine) {
             particleEngine.spawnBlood(
-                this.x + this.width / 2, 
-                this.y + this.height / 2, 
-                this.bloodColor, 
+                this.x + this.width / 2,
+                this.y + this.height / 2,
+                this.bloodColor,
                 actualDamage > 25 ? 12 : 6,
                 this.scale
             );
-            
+
             // Всплывающий текст урона
             const isCrit = isCritOverride || (amount > this.damage * 1.4);
             particleEngine.spawnFloatingText(
-                this.x + this.width / 2, 
-                this.y, 
-                actualDamage.toString(), 
-                isCrit ? "#e67e22" : "#e74c3c", 
+                this.x + this.width / 2,
+                this.y,
+                actualDamage.toString(),
+                isCrit ? "#e67e22" : "#e74c3c",
                 isCrit
             );
         }
@@ -87,25 +87,25 @@ class Entity {
     // Лечение сущности
     heal(amount, particleEngine) {
         if (!this.active) return 0;
-        
+
         const healAmount = Math.round(amount);
         const actualHeal = Math.min(this.maxHp - this.hp, healAmount);
-        
+
         if (actualHeal <= 0) return 0;
-        
+
         this.hp += actualHeal;
 
         if (particleEngine) {
             particleEngine.spawnSpark(
-                this.x + this.width / 2, 
-                this.y + this.height / 2, 
-                "#2ecc71", 
+                this.x + this.width / 2,
+                this.y + this.height / 2,
+                "#2ecc71",
                 5
             );
             particleEngine.spawnFloatingText(
-                this.x + this.width / 2, 
-                this.y, 
-                `+${actualHeal}`, 
+                this.x + this.width / 2,
+                this.y,
+                `+${actualHeal}`,
                 "#2ecc71"
             );
         }
@@ -136,7 +136,7 @@ class Entity {
 
         ctx.save();
         ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
-        
+
         // Разворот в сторону движения
         if (this.direction === -1) {
             ctx.scale(-1, 1);
@@ -196,11 +196,11 @@ class Player extends Entity {
         this.damageDealt = 0;
         this.healingDone = 0;
         this.resurrectCount = 0;
-        
+
         // Запрос смены класса на следующую волну
         this.pendingClassChange = null;
         this.classChangedThisWave = false;
-        
+
         // Флаг убегания лучника/мага (для задержки выстрела после остановки)
         this.fledLastFrame = false;
 
@@ -220,7 +220,7 @@ class Player extends Entity {
         if (!mods) return;
 
         const baseStats = CONFIG.CLASSES[this.classType];
-        
+
         // Сбрасываем характеристики к базовым с учетом уровня
         const lvlBonus = this.level - 1;
         const growth = baseStats.growth;
@@ -259,7 +259,7 @@ class Player extends Entity {
         this.auras.shield = (this.defense > baseStats.defense + 1);
         this.auras.glow = (this.damage > baseStats.damage * 1.15);
         this.auras.wind = (this.speed > baseStats.speed * 1.1);
-        
+
         // Проверяем глобальные механики (вампиризм, шипы)
         if (mods['mechanics']) {
             if (mods['mechanics'].lifesteal || mods['mechanics'].thorns || mods['mechanics'].berserk) {
@@ -320,7 +320,7 @@ class Player extends Entity {
                     true,
                     true
                 );
-                particleEngine.spawnSpark(this.x + this.width/2, this.y + this.height/2, "#f1c40f", 12);
+                particleEngine.spawnSpark(this.x + this.width / 2, this.y + this.height / 2, "#f1c40f", 12);
             }
 
             // Пересчитываем характеристики с учетом нового уровня
@@ -357,14 +357,14 @@ class Player extends Entity {
         // Ищем ближайшего врага для проверки опасной близости
         const closestEnemy = this.findClosestEntity(enemies);
         if (closestEnemy) {
-            fleeDx = (closestEnemy.x + closestEnemy.width/2) - (this.x + this.width/2);
-            fleeDy = (closestEnemy.y + closestEnemy.height/2) - (this.y + this.height/2);
-            fleeDist = Math.sqrt(fleeDx*fleeDx + fleeDy*fleeDy);
+            fleeDx = (closestEnemy.x + closestEnemy.width / 2) - (this.x + this.width / 2);
+            fleeDy = (closestEnemy.y + closestEnemy.height / 2) - (this.y + this.height / 2);
+            fleeDist = Math.sqrt(fleeDx * fleeDx + fleeDy * fleeDy);
 
             if (this.classType === 'healer' && fleeDist < 45) {
                 shouldFleeFromEnemy = true;
             }
-            if (this.classType === 'warrior' && (this.hp / this.maxHp < 0.05)) {
+            if (this.classType === 'warrior' && (this.hp / this.maxHp < 0.15)) {
                 shouldFleeFromEnemy = true;
             }
         }
@@ -395,7 +395,7 @@ class Player extends Entity {
                         if (!p.active && p !== this) {
                             const adx = p.x - this.x;
                             const ady = p.y - this.y;
-                            const adist = adx*adx + ady*ady;
+                            const adist = adx * adx + ady * ady;
                             if (adist < minDeadDist) {
                                 minDeadDist = adist;
                                 deadAlly = p;
@@ -432,7 +432,7 @@ class Player extends Entity {
                             if (p.active && p !== this) {
                                 const adx = p.x - this.x;
                                 const ady = p.y - this.y;
-                                const adist = adx*adx + ady*ady;
+                                const adist = adx * adx + ady * ady;
                                 if (adist < minAllyDist) {
                                     minAllyDist = adist;
                                     closestAlly = p;
@@ -453,10 +453,10 @@ class Player extends Entity {
                             const isBoss = e.isBoss;
                             let canTarget = true;
                             if (!isBoss) {
-                                const warriorCount = players.filter(p => 
-                                    p !== this && 
-                                    p.active && 
-                                    p.classType === 'warrior' && 
+                                const warriorCount = players.filter(p =>
+                                    p !== this &&
+                                    p.active &&
+                                    p.classType === 'warrior' &&
                                     p.currentTarget === e
                                 ).length;
                                 if (warriorCount >= 5) {
@@ -466,7 +466,7 @@ class Player extends Entity {
                             if (canTarget) {
                                 const dx = e.x - this.x;
                                 const dy = e.y - this.y;
-                                const dist = dx*dx + dy*dy;
+                                const dist = dx * dx + dy * dy;
                                 if (dist < minDist) {
                                     minDist = dist;
                                     closest = e;
@@ -487,9 +487,9 @@ class Player extends Entity {
 
             if (target) {
                 this.currentTarget = target;
-                const dx = (target.x + target.width/2) - (this.x + this.width/2);
-                const dy = (target.y + target.height/2) - (this.y + this.height/2);
-                const dist = Math.sqrt(dx*dx + dy*dy);
+                const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+                const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
 
                 this.direction = dx >= 0 ? 1 : -1;
 
@@ -545,11 +545,11 @@ class Player extends Entity {
                             this.lastAttackFrame = frameCount;
                             this.pose = 'attack';
                             this.animTimer = 0; // Сброс таймера анимации для удара
-                            
+
                             const healAmount = (target === this) ? this.damage * 0.5 : this.damage;
                             projectiles.push(new Projectile(
-                                this.x + this.width/2,
-                                this.y + this.height/2,
+                                this.x + this.width / 2,
+                                this.y + this.height / 2,
                                 target,
                                 this,
                                 'healball',
@@ -631,15 +631,15 @@ class Player extends Entity {
 
         if (this.classType === 'warrior') {
             // Воин машет мечом (АОЕ ближнего боя по конусу/полукругу перед собой)
-            const weaponX = this.x + this.width/2 + this.direction * 15;
-            const weaponY = this.y + this.height/2;
+            const weaponX = this.x + this.width / 2 + this.direction * 15;
+            const weaponY = this.y + this.height / 2;
 
             // Проверяем всех врагов в небольшом радиусе перед воином
             enemies.forEach(e => {
                 if (e.active) {
-                    const edx = (e.x + e.width/2) - weaponX;
-                    const edy = (e.y + e.height/2) - weaponY;
-                    const edist = Math.sqrt(edx*edx + edy*edy);
+                    const edx = (e.x + e.width / 2) - weaponX;
+                    const edy = (e.y + e.height / 2) - weaponY;
+                    const edist = Math.sqrt(edx * edx + edy * edy);
 
                     // Урон по площади (радиус 60 пикселей перед собой)
                     if (edist <= 60 && (this.direction === 1 ? edx >= -10 : edx <= 10)) {
@@ -674,8 +674,8 @@ class Player extends Entity {
                 damage *= 2.0; // критический урон +100% (то есть удваивается)
             }
             const proj = new Projectile(
-                this.x + this.width/2,
-                this.y + this.height/2,
+                this.x + this.width / 2,
+                this.y + this.height / 2,
                 target,
                 this,
                 'arrow',
@@ -687,8 +687,8 @@ class Player extends Entity {
         } else if (this.classType === 'mage') {
             // Маг пускает огненный шар
             projectiles.push(new Projectile(
-                this.x + this.width/2,
-                this.y + this.height/2,
+                this.x + this.width / 2,
+                this.y + this.height / 2,
                 target,
                 this,
                 'fireball',
@@ -699,7 +699,7 @@ class Player extends Entity {
     }
 
     spawnAuraEffect(particleEngine, color) {
-        particleEngine.spawnAuraParticle(this.x + this.width/2, this.y + this.height/2, color);
+        particleEngine.spawnAuraParticle(this.x + this.width / 2, this.y + this.height / 2, color);
     }
 
     findClosestEntity(list) {
@@ -709,7 +709,7 @@ class Player extends Entity {
             if (item.active) {
                 const dx = item.x - this.x;
                 const dy = item.y - this.y;
-                const dist = dx*dx + dy*dy;
+                const dist = dx * dx + dy * dy;
                 if (dist < minDist) {
                     minDist = dist;
                     closest = item;
@@ -727,24 +727,24 @@ class Player extends Entity {
         ctx.fillStyle = this.color;
         ctx.font = 'bold 9px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(this.username, this.x + this.width/2, this.y - 18);
+        ctx.fillText(this.username, this.x + this.width / 2, this.y - 18);
 
         // Уровень персонажа рядом с полоской здоровья
         ctx.fillStyle = "#f1c40f";
         ctx.font = '7px "Press Start 2P", monospace';
-        ctx.fillText(`L${this.level}`, this.x + this.width/2, this.y - 28);
+        ctx.fillText(`L${this.level}`, this.x + this.width / 2, this.y - 28);
 
         // Отрисовка щита ауры вокруг персонажа (синие вращающиеся пиксели)
         if (this.auras.shield) {
             const time = Date.now() * 0.003;
             const shieldRadius = 18;
-            const shieldX = this.x + this.width/2 + Math.cos(time) * shieldRadius;
-            const shieldY = this.y + this.height/2 + Math.sin(time) * shieldRadius;
+            const shieldX = this.x + this.width / 2 + Math.cos(time) * shieldRadius;
+            const shieldY = this.y + this.height / 2 + Math.sin(time) * shieldRadius;
             ctx.fillStyle = "#3498db";
             ctx.fillRect(shieldX - 2, shieldY - 2, 4, 4);
 
-            const shieldX2 = this.x + this.width/2 + Math.cos(time + Math.PI) * shieldRadius;
-            const shieldY2 = this.y + this.height/2 + Math.sin(time + Math.PI) * shieldRadius;
+            const shieldX2 = this.x + this.width / 2 + Math.cos(time + Math.PI) * shieldRadius;
+            const shieldY2 = this.y + this.height / 2 + Math.sin(time + Math.PI) * shieldRadius;
             ctx.fillRect(shieldX2 - 2, shieldY2 - 2, 4, 4);
         }
     }
@@ -754,16 +754,16 @@ class Player extends Entity {
 class Enemy extends Entity {
     constructor(x, y, enemyType, waveNumber, lobbySize = 1) {
         const baseStats = JSON.parse(JSON.stringify(CONFIG.ENEMIES[enemyType]));
-        
+
         // Масштабируем статы монстров от номера волны
         const waveMultiplier = 1.0 + (waveNumber - 1) * 0.15; // +15% ХП/урона за волну (сложность увеличена)
         // Увеличиваем сложность пропорционально количеству игроков в лобби (только здоровье)
         const playerMultiplier = lobbySize;
         baseStats.maxHp = Math.round(baseStats.maxHp * waveMultiplier * playerMultiplier);
         baseStats.damage = Math.round(baseStats.damage * waveMultiplier);
-        
+
         super(x, y, 22 * (baseStats.scale || 1), 22 * (baseStats.scale || 1), baseStats);
-        
+
         this.enemyType = enemyType;
         this.xpValue = baseStats.xpValue;
         this.scoreValue = baseStats.scoreValue;
@@ -785,18 +785,18 @@ class Enemy extends Entity {
                 // Проверяем столкновение с игроками во время разбега
                 players.forEach(p => {
                     if (p.active) {
-                        const dx = (p.x + p.width/2) - (this.x + this.width/2);
-                        const dy = (p.y + p.height/2) - (this.y + this.height/2);
-                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        const dx = (p.x + p.width / 2) - (this.x + this.width / 2);
+                        const dy = (p.y + p.height / 2) - (this.y + this.height / 2);
+                        const dist = Math.sqrt(dx * dx + dy * dy);
 
                         // Если врезались
-                        if (dist < (this.width + p.width)/2 + 5) {
+                        if (dist < (this.width + p.width) / 2 + 5) {
                             // Раскидываем ВСЕХ игроков в радиусе 160 пикселей
                             players.forEach(p2 => {
                                 if (p2.active) {
-                                    const p2dx = (p2.x + p2.width/2) - (this.x + this.width/2);
-                                    const p2dy = (p2.y + p2.height/2) - (this.y + this.height/2);
-                                    const p2dist = Math.sqrt(p2dx*p2dx + p2dy*p2dy) || 1;
+                                    const p2dx = (p2.x + p2.width / 2) - (this.x + this.width / 2);
+                                    const p2dy = (p2.y + p2.height / 2) - (this.y + this.height / 2);
+                                    const p2dist = Math.sqrt(p2dx * p2dx + p2dy * p2dy) || 1;
 
                                     if (p2dist < 160) {
                                         const force = 18 * (1 - p2dist / 160);
@@ -804,7 +804,7 @@ class Enemy extends Entity {
                                         p2.kbY = (p2dy / p2dist) * force;
 
                                         if (particleEngine) {
-                                            particleEngine.spawnSpark(p2.x + p2.width/2, p2.y + p2.height/2, "#3498db", 3);
+                                            particleEngine.spawnSpark(p2.x + p2.width / 2, p2.y + p2.height / 2, "#3498db", 3);
                                         }
                                     }
                                 }
@@ -812,7 +812,7 @@ class Enemy extends Entity {
 
                             if (gameCameraShake) gameCameraShake(15);
                             if (particleEngine) {
-                                particleEngine.spawnFloatingText(this.x + this.width/2, this.y - 10, "БАМС!", "#e74c3c", true);
+                                particleEngine.spawnFloatingText(this.x + this.width / 2, this.y - 10, "БАМС!", "#e74c3c", true);
                             }
 
                             // Конец заряда
@@ -854,7 +854,7 @@ class Enemy extends Entity {
             if (p.active) {
                 const dx = p.x - this.x;
                 const dy = p.y - this.y;
-                const dist = dx*dx + dy*dy;
+                const dist = dx * dx + dy * dy;
                 if (dist < minDist) {
                     minDist = dist;
                     target = p;
@@ -863,9 +863,9 @@ class Enemy extends Entity {
         });
 
         if (target) {
-            const dx = (target.x + target.width/2) - (this.x + this.width/2);
-            const dy = (target.y + target.height/2) - (this.y + this.height/2);
-            const dist = Math.sqrt(dx*dx + dy*dy);
+            const dx = (target.x + target.width / 2) - (this.x + this.width / 2);
+            const dy = (target.y + target.height / 2) - (this.y + this.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
             this.direction = dx >= 0 ? 1 : -1;
 
@@ -876,7 +876,7 @@ class Enemy extends Entity {
                 this.chargeVx = (dx / dist) * this.speed * 4.5;
                 this.chargeVy = (dy / dist) * this.speed * 4.5;
                 if (particleEngine) {
-                    particleEngine.spawnFloatingText(this.x + this.width/2, this.y, "РАЗБЕГ!", "#e67e22", true);
+                    particleEngine.spawnFloatingText(this.x + this.width / 2, this.y, "РАЗБЕГ!", "#e67e22", true);
                 }
                 return;
             }
@@ -900,8 +900,8 @@ class Enemy extends Entity {
                     if (this.enemyType === 'goblin_stone' && projectiles) {
                         // Метаем камень
                         projectiles.push(new Projectile(
-                            this.x + this.width/2,
-                            this.y + this.height/2,
+                            this.x + this.width / 2,
+                            this.y + this.height / 2,
                             target,
                             this,
                             'stone',
@@ -912,7 +912,7 @@ class Enemy extends Entity {
                     } else {
                         // Наносим урон в ближнем бою
                         const actualDmg = target.takeDamage(this.damage * (0.8 + Math.random() * 0.4), this.name, particleEngine);
-                        
+
                         // Эффект шипов (легендарная реликвия игроков)
                         if (actualDmg > 0 && target.active && target.auras.legendary) {
                             // Ищем модификатор шипов
@@ -974,16 +974,16 @@ class Boss extends Enemy {
 
             // Визуальный круг взрыва топота
             if (particleEngine) {
-                particleEngine.spawnSpark(this.x + this.width/2, this.y + this.height/2, "#d35400", 30);
-                particleEngine.spawnFloatingText(this.x + this.width/2, this.y, "ЗЕМЛЕТРЯСЕНИЕ!", "#e74c3c", true);
+                particleEngine.spawnSpark(this.x + this.width / 2, this.y + this.height / 2, "#d35400", 30);
+                particleEngine.spawnFloatingText(this.x + this.width / 2, this.y, "ЗЕМЛЕТРЯСЕНИЕ!", "#e74c3c", true);
             }
 
             // Наносим урон ВСЕМ игрокам в радиусе 160 пикселей
             players.forEach(p => {
                 if (p.active) {
-                    const dx = (p.x + p.width/2) - (this.x + this.width/2);
-                    const dy = (p.y + p.height/2) - (this.y + this.height/2);
-                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const dx = (p.x + p.width / 2) - (this.x + this.width / 2);
+                    const dy = (p.y + p.height / 2) - (this.y + this.height / 2);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
                     if (dist <= 160) {
                         // Топот наносит 60% от базового урона босса, игнорируя половину брони
@@ -1012,11 +1012,11 @@ class Projectile {
         this.active = true;
 
         // Рассчитываем вектор полета
-        const tx = target.x + target.width/2;
-        const ty = target.y + target.height/2;
+        const tx = target.x + target.width / 2;
+        const ty = target.y + target.height / 2;
         const dx = tx - this.x;
         const dy = ty - this.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > 0.001) {
             this.vx = (dx / dist) * this.speed;
@@ -1034,11 +1034,11 @@ class Projectile {
 
         // Если снаряд летит в цель, корректируем направление (самонаводка)
         if (this.target && this.target.active) {
-            const tx = this.target.x + this.target.width/2;
-            const ty = this.target.y + this.target.height/2;
+            const tx = this.target.x + this.target.width / 2;
+            const ty = this.target.y + this.target.height / 2;
             const dx = tx - this.x;
             const dy = ty - this.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
             if (dist > 5) {
                 this.vx = (dx / dist) * this.speed;
@@ -1140,7 +1140,7 @@ class Projectile {
             // Обычная стрела лучника (или камень гоблина)
             const isCrit = this.isCrit || false;
             const actualDmg = enemy.takeDamage(this.damage * (0.9 + Math.random() * 0.2), this.owner?.username || "Лучник", particleEngine, isCrit);
-            
+
             if (this.owner) {
                 this.owner.damageDealt += actualDmg;
                 if (!enemy.active) {
@@ -1164,8 +1164,8 @@ class Projectile {
                     if (e.active && e !== enemy) {
                         const edx = e.x - this.x;
                         const edy = e.y - this.y;
-                        const edist = edx*edx + edy*edy;
-                        if (edist < minAllyDist && edist < 200*200) { // Ищем в радиусе 200px
+                        const edist = edx * edx + edy * edy;
+                        if (edist < minAllyDist && edist < 200 * 200) { // Ищем в радиусе 200px
                             minAllyDist = edist;
                             nextTarget = e;
                         }
@@ -1174,11 +1174,11 @@ class Projectile {
 
                 if (nextTarget) {
                     this.target = nextTarget;
-                    const tx = nextTarget.x + nextTarget.width/2;
-                    const ty = nextTarget.y + nextTarget.height/2;
+                    const tx = nextTarget.x + nextTarget.width / 2;
+                    const ty = nextTarget.y + nextTarget.height / 2;
                     const dx = tx - this.x;
                     const dy = ty - this.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist > 0.001) {
                         this.vx = (dx / dist) * this.speed;
                         this.vy = (dy / dist) * this.speed;
@@ -1198,21 +1198,21 @@ class Projectile {
 
     checkCollision(rect) {
         return this.x < rect.x + rect.width &&
-               this.x + this.width > rect.x &&
-               this.y < rect.y + rect.height &&
-               this.y + this.height > rect.y;
+            this.x + this.width > rect.x &&
+            this.y < rect.y + rect.height &&
+            this.y + this.height > rect.y;
     }
 
     draw(ctx) {
         if (!this.active) return;
-        
+
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.vx >= 0 ? this.lastAngle : this.lastAngle + Math.PI); // Для стрел разворачиваем спрайт
 
         const sprite = Sprites.projectiles[this.type];
         if (sprite) {
-            ctx.drawImage(sprite, -this.width/2, -this.height/2, this.width, this.height);
+            ctx.drawImage(sprite, -this.width / 2, -this.height / 2, this.width, this.height);
         } else {
             // Резервный отрисовщик
             ctx.fillStyle = this.type === 'healball' ? "#2ecc71" : "#f1c40f";
@@ -1231,7 +1231,7 @@ class HealthPotion {
         this.height = 14;
         this.value = CONFIG.HEAL_POTION_VALUE;
         this.active = true;
-        
+
         this.magnetTarget = null; // Игрок, который притягивает зелье
         this.bobY = 0;
         this.bobTimer = Math.random() * 100;
@@ -1251,9 +1251,9 @@ class HealthPotion {
                 return;
             }
 
-            const dx = (this.magnetTarget.x + this.magnetTarget.width/2) - this.x;
-            const dy = (this.magnetTarget.y + this.magnetTarget.height/2) - this.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
+            const dx = (this.magnetTarget.x + this.magnetTarget.width / 2) - this.x;
+            const dy = (this.magnetTarget.y + this.magnetTarget.height / 2) - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
             if (dist < 8) {
                 // Выпиваем
@@ -1271,9 +1271,9 @@ class HealthPotion {
 
             players.forEach(p => {
                 if (p.active) {
-                    const dx = p.x + p.width/2 - this.x;
-                    const dy = p.y + p.height/2 - this.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const dx = p.x + p.width / 2 - this.x;
+                    const dy = p.y + p.height / 2 - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
                     if (dist < minDist) {
                         minDist = dist;
@@ -1315,11 +1315,11 @@ class FirePuddle {
         this.maxDuration = duration;
         this.damage = damagePerTick;
         this.owner = owner;
-        
+
         this.active = true;
         this.tickInterval = 15; // Урон каждые 15 кадров (~4 раза в секунду)
         this.lastTickFrame = 0;
-        
+
         this.sparkTimer = 0;
     }
 
@@ -1332,14 +1332,14 @@ class FirePuddle {
         if (frameCount % this.tickInterval === 0) {
             enemies.forEach(e => {
                 if (e.active) {
-                    const dx = (e.x + e.width/2) - this.x;
-                    const dy = ((e.y + e.height/2) - this.y) / 0.6; // Масштабируем вертикальную ось под эллипс
-                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const dx = (e.x + e.width / 2) - this.x;
+                    const dy = ((e.y + e.height / 2) - this.y) / 0.6; // Масштабируем вертикальную ось под эллипс
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
                     // Если враг в луже — наносим урон
                     if (dist <= this.radius) {
                         const actualDmg = e.takeDamage(this.damage * (0.8 + Math.random() * 0.4), this.owner?.username || "Маг", particleEngine);
-                        
+
                         if (this.owner) {
                             this.owner.damageDealt += actualDmg;
                             if (!e.active) {
