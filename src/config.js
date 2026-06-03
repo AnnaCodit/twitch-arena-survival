@@ -24,6 +24,7 @@ const CONFIG = {
             defense: 5,       // Снижение получаемого урона
             color: "#e74c3c", // Красный (акцент для воина)
             bulletType: null, // Атака в ближнем бою
+            maxWarriorsPerTarget: 3, // Максимальное число воинов на одну цель
             growth: { maxHp: 15, damage: 1.5, defense: 1 } // Бонусы за каждый уровень
         },
         archer: {

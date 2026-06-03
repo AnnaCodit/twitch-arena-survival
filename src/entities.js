@@ -473,7 +473,8 @@ class Player extends Entity {
             } else {
                 // Боевые классы ищут ближайшего врага
                 if (this.classType === 'warrior') {
-                    // Воин ищет ближайшего врага, которого атакуют меньше 5 других воинов (кроме боссов)
+                    // Воин ищет ближайшего врага, которого атакуют меньше maxWarriorsPerTarget других воинов (кроме боссов)
+                    const limit = CONFIG.CLASSES.warrior.maxWarriorsPerTarget || 3;
                     let closest = null;
                     let minDist = Infinity;
                     enemies.forEach(e => {
@@ -487,7 +488,7 @@ class Player extends Entity {
                                     p.classType === 'warrior' &&
                                     p.currentTarget === e
                                 ).length;
-                                if (warriorCount >= 5) {
+                                if (warriorCount >= limit) {
                                     canTarget = false;
                                 }
                             }
