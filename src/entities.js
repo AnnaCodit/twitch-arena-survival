@@ -203,6 +203,7 @@ class Player extends Entity {
 
         // Флаг убегания лучника/мага (для задержки выстрела после остановки)
         this.fledLastFrame = false;
+        this.isFleeing = false; // Флаг панического бегства воина
 
         // Характеристики огненных луж мага
         this.puddleRadiusMul = 1.0;
@@ -364,17 +365,41 @@ class Player extends Entity {
             if (this.classType === 'healer' && fleeDist < 45) {
                 shouldFleeFromEnemy = true;
             }
-            if (this.classType === 'warrior' && (this.hp / this.maxHp < 0.15)) {
+            if (this.classType === 'warrior' && (this.hp / this.maxHp < 0.20)) {
                 shouldFleeFromEnemy = true;
             }
         }
 
         if (shouldFleeFromEnemy) {
             if (fleeDist > 0.001) {
-                this.vx = -(fleeDx / fleeDist) * this.speed;
-                this.vy = -(fleeDy / fleeDist) * this.speed;
+                const fleeSpeed = this.classType === 'warrior' ? this.speed * 1.4 : this.speed;
+                this.vx = -(fleeDx / fleeDist) * fleeSpeed;
+                this.vy = -(fleeDy / fleeDist) * fleeSpeed;
                 this.pose = 'walk';
                 this.direction = fleeDx >= 0 ? -1 : 1;
+
+                if (this.classType === 'warrior') {
+                    if (!this.isFleeing) {
+                        this.isFleeing = true;
+                        if (particleEngine) {
+                            particleEngine.spawnFloatingText(
+                                this.x + this.width / 2,
+                                this.y - 10,
+                                "БЕЖИМ!",
+                                "#e74c3c",
+                                true
+                            );
+                        }
+                    }
+                    if (frameCount % 15 === 0 && particleEngine) {
+                        particleEngine.spawnSpark(
+                            this.x + this.width / 2,
+                            this.y,
+                            "#3498db",
+                            2
+                        );
+                    }
+                }
             } else {
                 this.vx = 0;
                 this.vy = 0;
@@ -382,6 +407,9 @@ class Player extends Entity {
             }
             this.currentTarget = null;
         } else {
+            if (this.classType === 'warrior') {
+                this.isFleeing = false;
+            }
             // Обычное поведение поиска цели и движения
             if (this.classType === 'healer') {
                 // Проверяем перезарядку воскрешения (раз в 20 секунд = 1200 кадров)
@@ -733,6 +761,13 @@ class Player extends Entity {
         ctx.fillStyle = "#f1c40f";
         ctx.font = '7px "Press Start 2P", monospace';
         ctx.fillText(`L${this.level}`, this.x + this.width / 2, this.y - 28);
+
+        // Индикатор паники/убегания для воина
+        if (this.classType === 'warrior' && this.isFleeing) {
+            ctx.fillStyle = "#e74c3c";
+            ctx.font = 'bold 7px "Press Start 2P", monospace';
+            ctx.fillText("БЕЖИТ!", this.x + this.width / 2, this.y - 38);
+        }
 
         // Отрисовка щита ауры вокруг персонажа (синие вращающиеся пиксели)
         if (this.auras.shield) {
