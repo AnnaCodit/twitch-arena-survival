@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitch Pixel Arena</title>
+    <!-- Подключаем Google Fonts: Press Start 2P для пикселей и Outfit для читабельных текстов/таблиц -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 1. ЭКРАН СТАРТОВОГО ЛОББИ -->
+    <div id="lobby-screen" class="screen">
+        <div class="lobby-card glass">
+            <h1 class="pixel-glow">TWITCH PIXEL ARENA</h1>
+            <p class="subtitle">Интерактивный пиксельный автобатлер для твоих зрителей</p>
+
+            <!-- Блок подключения к каналу -->
+            <div class="input-group">
+                <label for="twitch-channel">Канал Twitch:</label>
+                <div class="input-row">
+                    <input type="text" id="twitch-channel" placeholder="Имя канала (например, wellplay)" autocomplete="off">
+                    <button id="btn-connect" class="btn">Подключить</button>
+                </div>
+                <div id="connection-status" class="status-text">Введите канал и нажмите «Подключить»</div>
+            </div>
+
+            <!-- Список участников в лобби -->
+            <div class="lobby-players-box">
+                <div class="box-header">
+                    <span>Участники в очереди:</span>
+                    <span class="count-badge"><span id="lobby-players-count">0</span> игроков</span>
+                </div>
+                <div class="lobby-class-stats">
+                    <span class="class-stat warrior-color">Воины: <strong id="lobby-warriors-count">0</strong></span>
+                    <span class="class-stat archer-color">Лучники: <strong id="lobby-archers-count">0</strong></span>
+                    <span class="class-stat mage-color">Маги: <strong id="lobby-mages-count">0</strong></span>
+                    <span class="class-stat healer-color">Целители: <strong id="lobby-healers-count">0</strong></span>
+                </div>
+                <div id="lobby-players-list" class="lobby-players-list">
+                    <!-- Заглушка, если никого нет -->
+                    <div class="empty-lobby-text">Зрители появятся здесь после отправки команды !join в чат</div>
+                </div>
+            </div>
+
+            <!-- Инструкции для зрителей -->
+            <div class="instructions-box">
+                <h3>Команды для чата:</h3>
+                <ul>
+                    <li><span>!join / !войти / !играть [класс]</span> — войти в игру (воин, маг, лучник, хилер/клирик)</li>
+                    <li><span>!class / !класс [класс]</span> — сменить класс на следующую волну</li>
+                    <li><span>1 / 2 / 3</span> — проголосовать за реликвию (просто цифра в чат)</li>
+                </ul>
+            </div>
+
+            <!-- Кнопки управления стримера -->
+            <div class="action-row">
+                <button id="btn-sim-join" class="btn btn-secondary">Симулировать вход бота</button>
+                <button id="btn-start-game" class="btn btn-primary btn-pulse">Начать битву!</button>
+            </div>
+            
+            <p class="obs-tip">Подсказка: Во время игры нажмите клавишу <strong>[O]</strong> для переключения в режим OBS (прозрачный фон, скрытие панелей управления).</p>
+        </div>
+    </div>
+
+    <!-- 2. ИГРОВОЙ ЭКРАН (КОНТЕЙНЕР) -->
+    <div id="game-container" class="hidden" style="display: none;">
+        <!-- Игровой холст -->
+        <canvas id="game-canvas" width="1200" height="800"></canvas>
+
+        <!-- Игровой HUD / Оверлей -->
+        <div id="game-hud">
+            <div id="overlay-wave" class="hud-panel pixel-text">ВОЛНА: 0</div>
+            <div id="overlay-wave-progress" class="hud-panel pixel-text">ВРАГИ: 0</div>
+            <div id="overlay-alive" class="hud-panel pixel-text">В ЖИВЫХ: 0 / 0</div>
+            <div id="overlay-score" class="hud-panel pixel-text">СЧЕТ: 0</div>
+        </div>
+
+        <!-- Логи сражения -->
+        <div id="battle-log" class="glass">
+            <div class="battle-log-header">Логи Сражения</div>
+            <div id="battle-log-content" class="battle-log-content"></div>
+        </div>
+
+        <!-- Сворачиваемый симулятор Twitch-чата -->
+        <div id="chat-simulator" class="glass">
+            <div class="chat-header">
+                <span class="header-title">Симулятор Чата Твича</span>
+                <button id="btn-toggle-chat" class="btn-toggle">_</button>
+            </div>
+            <div class="chat-body-content">
+                <!-- Окно сообщений -->
+                <div id="chat-log" class="chat-log">
+                    <div class="chat-message system">Система: Чат-симулятор запущен. Подключите реальный канал или используйте кнопки ниже для тестов.</div>
+                </div>
+
+                <!-- Отправка кастомного сообщения -->
+                <div class="chat-input-row">
+                    <input type="text" id="chat-input" placeholder="Написать в чат от Стримера..." autocomplete="off">
+                    <button id="btn-chat-send" class="btn">Отправить</button>
+                </div>
+
+                <!-- Быстрые действия симуляции -->
+                <div class="chat-sim-actions">
+                    <button id="btn-sim-10-join" class="btn btn-sm btn-secondary">+10 Зрителей</button>
+                    <button id="btn-sim-votes" class="btn btn-sm btn-secondary">Вкинуть голоса</button>
+                    <button id="btn-auto-chat" class="btn btn-sm btn-accent">Авто-чат: ВЫКЛ</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Подсказка по OBS режиму во время игры -->
+        <div class="hud-obs-hint">OBS режим: Клавиша [O]</div>
+    </div>
+
+    <!-- 3. ЭКРАН КОНЦА ИГРЫ (GAME OVER) -->
+    <div id="gameover-screen" class="screen hidden" style="display: none;">
+        <div class="gameover-card glass">
+            <h1 class="pixel-glow danger">ВСЕ ПОГИБЛИ</h1>
+            <p class="subtitle">Ваша команда пала под натиском монстров</p>
+
+            <!-- Основные метрики -->
+            <div class="metrics-row">
+                <div class="metric-box">
+                    <span class="label">Пройдено волн</span>
+                    <span id="stat-wave" class="value">0</span>
+                </div>
+                <div class="metric-box">
+                    <span class="label">Время выживания</span>
+                    <span id="stat-time" class="value">00:00</span>
+                </div>
+                <div class="metric-box">
+                    <span class="label">Итоговый счет</span>
+                    <span id="stat-score" class="value">0</span>
+                </div>
+                <div class="metric-box">
+                    <span class="label">Исцелено (хилеры)</span>
+                    <span id="stat-healer-heal" class="value">0</span>
+                </div>
+                <div class="metric-box">
+                    <span class="label">Воскрешений (хилеры)</span>
+                    <span id="stat-healer-res" class="value">0</span>
+                </div>
+            </div>
+
+            <!-- Детальная статистика по каждому зрителю -->
+            <div class="stats-table-box">
+                <h3>Статистика участников рейда:</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Зритель</th>
+                                <th>Класс</th>
+                                <th>Уровень</th>
+                                <th class="stat-kills">Убийства</th>
+                                <th>Нанесенный урон</th>
+                                <th>Вылечено HP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-table-body">
+                            <!-- Заполняется динамически из ui.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Перезапуск -->
+            <div class="action-row">
+                <button id="btn-restart" class="btn btn-primary btn-pulse">Вернуться в лобби</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подключаем скрипты игры по порядку -->
+    <script src="src/config.js"></script>
+    <script src="src/sprites.js"></script>
+    <script src="src/particles.js"></script>
+    <script src="src/twitch.js"></script>
+    <script src="src/entities.js"></script>
+    <script src="src/game.js"></script>
+    <script src="src/ui.js"></script>
+</body>
+</html>
