@@ -670,8 +670,13 @@ class Player extends Entity {
                     const edy = (e.y + e.height / 2) - weaponY;
                     const edist = Math.sqrt(edx * edx + edy * edy);
 
-                    // Урон по площади (радиус 60 пикселей перед собой)
-                    if (edist <= 60 && (this.direction === 1 ? edx >= -10 : edx <= 10)) {
+                    // Вычисляем расстояние от центра воина до центра врага, чтобы избежать "мертвой зоны" при атаке в упор
+                    const dxFromWarrior = (e.x + e.width / 2) - (this.x + this.width / 2);
+                    const dyFromWarrior = (e.y + e.height / 2) - (this.y + this.height / 2);
+                    const distFromWarrior = Math.sqrt(dxFromWarrior * dxFromWarrior + dyFromWarrior * dyFromWarrior);
+
+                    // Урон по площади (радиус 60 пикселей перед собой). Попадаем, если враг в секторе атаки ИЛИ находится вплотную (distFromWarrior < 35)
+                    if (edist <= 60 && (distFromWarrior < 35 || (this.direction === 1 ? edx >= -10 : edx <= 10))) {
                         const actualDmg = e.takeDamage(finalDamage * (0.8 + Math.random() * 0.4), this.username, particleEngine);
                         this.damageDealt += actualDmg;
 

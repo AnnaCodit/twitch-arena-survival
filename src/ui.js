@@ -387,4 +387,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    // Автоматическое подключение при загрузке, если канал сохранен в localStorage
+    if (savedChannel) {
+        game.twitch.connect(savedChannel);
+    }
 });
