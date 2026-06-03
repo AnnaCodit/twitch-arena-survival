@@ -475,6 +475,11 @@ class Player extends Entity {
                         }
                     });
                     target = closest;
+
+                    // Резервный выбор: если все цели заняты воинами, выбираем ближайшего врага, чтобы не стоять без дела
+                    if (!target && enemies.some(e => e.active)) {
+                        target = this.findClosestEntity(enemies);
+                    }
                 } else {
                     target = this.findClosestEntity(enemies);
                 }
