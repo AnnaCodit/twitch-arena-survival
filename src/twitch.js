@@ -179,9 +179,9 @@ class TwitchConnection {
         let args = [];
 
         const trimmedText = text.trim();
-        // Поддержка просто цифр 1, 2, 3 для голосования (без восклицательного знака)
-        if (trimmedText === "1" || trimmedText === "2" || trimmedText === "3" || 
-            trimmedText === "!1" || trimmedText === "!2" || trimmedText === "!3") {
+        // Поддержка просто цифр 1, 2, 3, 4 для голосования (без восклицательного знака)
+        if (trimmedText === "1" || trimmedText === "2" || trimmedText === "3" || trimmedText === "4" || 
+            trimmedText === "!1" || trimmedText === "!2" || trimmedText === "!3" || trimmedText === "!4") {
             // Нормализуем команду: убираем восклицательный знак, если он был, оставляем чистую цифру
             command = trimmedText.replace("!", "");
         } else if (trimmedText.startsWith("!")) {
@@ -223,7 +223,7 @@ class TwitchConnection {
                 const classes = ["воин", "маг", "лучник", "целитель", "warrior", "mage", "archer", "healer"];
                 text = `!class ${classes[Math.floor(Math.random() * classes.length)]}`;
             } else if (randomType < 0.8) {
-                text = Math.floor(1 + Math.random() * 3).toString(); // Просто цифра 1, 2 или 3
+                text = Math.floor(1 + Math.random() * 4).toString(); // Просто цифра от 1 до 4
             } else {
                 const messages = [
                     "Всем привет!", "Давайте поднажмем!", "Сложная волна",

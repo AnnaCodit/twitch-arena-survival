@@ -447,18 +447,25 @@ class Game {
             if (timeRemaining <= 0) {
                 // Подсчитываем победителя
                 let winningOption = 1;
-                let maxVotes = this.relicVotes[1];
+                const totalVotes = Object.values(this.relicVotes).reduce((sum, v) => sum + v, 0);
 
-                for (let o = 2; o <= 4; o++) {
-                    if (this.relicVotes[o] > maxVotes) {
-                        winningOption = o;
-                        maxVotes = this.relicVotes[o];
+                if (totalVotes === 0) {
+                    // Если никто не проголосовал, берем случайную карту
+                    winningOption = Math.floor(Math.random() * 4) + 1;
+                } else {
+                    let maxVotes = this.relicVotes[1];
+                    let winners = [1];
+
+                    for (let o = 2; o <= 4; o++) {
+                        if (this.relicVotes[o] > maxVotes) {
+                            maxVotes = this.relicVotes[o];
+                            winners = [o];
+                        } else if (this.relicVotes[o] === maxVotes) {
+                            winners.push(o);
+                        }
                     }
-                }
-
-                // Если никто не проголосовал, берем случайную карту
-                if (maxVotes === 0) {
-                    winningOption = Math.floor(1 + Math.random() * 4);
+                    // Если есть ничья (равное кол-во голосов), выбираем случайно среди лидеров
+                    winningOption = winners[Math.floor(Math.random() * winners.length)];
                 }
 
                 const chosenRelic = this.relicsToVote[winningOption - 1];
