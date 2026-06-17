@@ -161,10 +161,14 @@ class ModeManager {
                 console.warn(`Unknown game mode "${modeId}", falling back to "survival".`);
             }
             nextMode = this.modes.get('survival');
-        }
-
+    switchTo(modeId, options = {}) {
+        let nextMode = this.modes.get(modeId);
         if (!nextMode) {
-            throw new Error(`Cannot switch game mode: "${modeId}" is unknown and fallback "survival" is not registered.`);
+            console.warn("Unknown game mode " + modeId + ", falling back to survival.");
+            nextMode = this.modes.get('survival');
+            if (!nextMode) {
+                throw new Error("Failed to switch mode: requested mode " + modeId + " is unknown and fallback survival mode is not registered.");
+            }
         }
 
         if (this.activeMode && this.activeMode !== nextMode) {
