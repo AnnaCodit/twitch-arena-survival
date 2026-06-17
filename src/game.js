@@ -474,6 +474,7 @@ class Game {
             }
 
             // 5. Обновление снарядов
+            // 5. Обновление снарядов
             const projectileTargets = this.getEnemyTargets();
             this.projectiles.forEach(pr => {
                 pr.update(this.enemies, projectileTargets, this.particles, this.relicModifiers, (amt) => this.shake(amt), this.firePuddles);
