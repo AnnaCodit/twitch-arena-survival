@@ -133,10 +133,12 @@ body {
 
 .lobby-card {
     width: 650px;
+    max-height: 100vh;
     padding: 40px;
     display: flex;
     flex-direction: column;
     gap: 24px;
+    overflow-y: auto;
 }
 
 .gameover-card {
@@ -360,7 +362,62 @@ input[type="text"]:focus {
     font-size: 8px;
     color: #ffffff;
     display: inline-block;
-    width: 120px;
+    width: 142px;
+}
+
+.mode-select-box {
+    border: 1px solid rgba(0, 240, 255, 0.22);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.mode-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+}
+
+.mode-option {
+    min-height: 72px;
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    color: #ffffff;
+    cursor: pointer;
+    padding: 10px 12px;
+    text-align: left;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+
+.mode-option:hover {
+    border-color: rgba(0, 240, 255, 0.45);
+    background: rgba(0, 240, 255, 0.06);
+}
+
+.mode-option:active {
+    transform: scale(0.98);
+}
+
+.mode-option.active {
+    border-color: var(--color-accent);
+    background: rgba(0, 240, 255, 0.1);
+    box-shadow: 0 0 10px var(--color-accent-glow);
+}
+
+.mode-option strong {
+    display: block;
+    font-family: var(--font-pixel);
+    font-size: 9px;
+    margin-bottom: 8px;
+}
+
+.mode-option span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.25;
 }
 
 .action-row {
@@ -456,6 +513,16 @@ input[type="text"]:focus {
 #overlay-score {
     border-color: #f1c40f;
     text-shadow: 0 0 5px rgba(241, 196, 15, 0.4);
+}
+
+#overlay-objective {
+    border-color: var(--color-success);
+    text-shadow: 0 0 5px var(--color-success-glow);
+}
+
+#overlay-objective.warning {
+    border-color: var(--color-danger);
+    text-shadow: 0 0 5px var(--color-danger-glow);
 }
 
 .hud-obs-hint {

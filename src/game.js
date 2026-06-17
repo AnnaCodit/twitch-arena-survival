@@ -16,6 +16,10 @@ class Game {
         // Инициализация модулей
         this.particles = new ParticleEngine(this.width, this.height);
         this.twitch = new TwitchConnection();
+        this.modeId = 'survival';
+        this.modeName = 'Survival';
+        this.gameOverReason = 'players';
+        this.defenseObjective = null;
 
         // Списки объектов
         this.players = [];
@@ -42,6 +46,8 @@ class Game {
         this.timeElapsed = 0; // Время игры в секундах
         this.score = 0;
         this.enemiesKilled = 0;
+        this.potionKillsSinceDrop = 0;
+        this.lastStandRevivesUsed = 0;
 
         // Эффект тряски экрана
         this.cameraShake = 0;
@@ -71,6 +77,9 @@ class Game {
 
         // Привязываем события Twitch
         this.twitch.onCommandCallback = this.handleCommand.bind(this);
+        this.modeManager = new ModeManager(this);
+        this.modeManager.register(new SurvivalMode(this));
+        this.modeManager.register(new DefenseMode(this));
 
         this.init();
     }
@@ -108,7 +117,15 @@ class Game {
     }
 
     // Запуск матча из Лобби
-    startMatch() {
+    startMatch(modeId = 'survival') {
+        this.modeManager.switchTo(modeId);
+    }
+
+    startCoreMatch(options = {}) {
+        this.modeId = options.modeId || 'survival';
+        this.modeName = options.modeName || 'Survival';
+        this.gameOverReason = 'players';
+        this.defenseObjective = null;
         this.players = [];
         this.enemies = [];
         this.projectiles = [];
@@ -127,6 +144,8 @@ class Game {
         this.wave = 0;
         this.score = 0;
         this.enemiesKilled = 0;
+        this.potionKillsSinceDrop = 0;
+        this.lastStandRevivesUsed = 0;
         this.timeElapsed = 0;
         this.frameCount = 0;
         this.pendingSpawnUsers.clear();
@@ -149,11 +168,19 @@ class Game {
 
         this.lobbyUsers.clear(); // Очищаем список ожидания лобби
         this.gameState = 'playing';
+        if (options.createDefenseObjective) {
+            this.createDefenseObjective();
+        }
         this.startNextWave();
     }
 
     // Перезапуск всей игры (возврат в главное меню)
     returnToLobby() {
+        this.modeManager.exitActive();
+        this.returnToLobbyCore();
+    }
+
+    returnToLobbyCore() {
         this.gameState = 'lobby';
         this.lobbyUsers.clear();
         this.pendingSpawnUsers.clear();
@@ -163,6 +190,10 @@ class Game {
         this.items = [];
         this.activeRelics = [];
         this.firePuddles = [];
+        this.defenseObjective = null;
+        this.gameOverReason = 'players';
+        this.potionKillsSinceDrop = 0;
+        this.lastStandRevivesUsed = 0;
         this.particles.clear();
         this.clearBattleLogs();
         this.init();
@@ -172,6 +203,25 @@ class Game {
         if (this.onBattleLog) {
             this.onBattleLog(type, message);
         }
+    }
+
+    createDefenseObjective() {
+        this.defenseObjective = new DefenseObjective(
+            this.width / 2 - 22,
+            this.height / 2 - 26
+        );
+    }
+
+    getEnemyTargets() {
+        const targets = this.players.filter(p => p.active);
+        if (this.defenseObjective && this.defenseObjective.active) {
+            targets.push(this.defenseObjective);
+        }
+        return targets;
+    }
+
+    isDefenseObjectiveDestroyed() {
+        return Boolean(this.defenseObjective && !this.defenseObjective.active);
     }
 
     clearBattleLogs() {
@@ -185,7 +235,9 @@ class Game {
         this.clearBattleLogs();
         this.wave++;
         this.waveEnemiesSpawned = 0;
+        this.waveSpawnTimer = 0;
         this.waveInProgress = true;
+        this.lastStandRevivesUsed = 0;
 
         // Возрождаем ВСЕХ погибших игроков, лечим живых и расставляем всех случайным образом по карте
         this.players.forEach(p => {
@@ -332,7 +384,11 @@ class Game {
     }
 
     // Игровой тик: физика, ИИ, спавн
-    update() {
+    update(dt) {
+        this.modeManager.update(dt);
+    }
+
+    updateCore(dt) {
         this.frameCount++;
 
         // Обновление тряски экрана
@@ -374,8 +430,16 @@ class Game {
             // 3. Обновление игроков
             const alivePlayers = this.players.filter(p => p.active);
             
-            // Если все игроки погибли — GAME OVER
             if (this.players.length > 0 && alivePlayers.length === 0) {
+                if (!this.triggerLastStand()) {
+                    this.gameOverReason = 'players';
+                    this.gameState = 'gameover';
+                    return;
+                }
+            }
+
+            if (this.isDefenseObjectiveDestroyed()) {
+                this.gameOverReason = 'objective';
                 this.gameState = 'gameover';
                 return;
             }
@@ -385,8 +449,9 @@ class Game {
             });
 
             // 4. Обновление врагов
+            const enemyTargets = this.getEnemyTargets();
             this.enemies.forEach(e => {
-                e.update(this.players, this.frameCount, this.particles, (amt) => this.shake(amt), this.projectiles);
+                e.update(enemyTargets, this.frameCount, this.particles, (amt) => this.shake(amt), this.projectiles);
                 
                 // Проверяем шипы (возврат урона)
                 if (e.active && this.relicModifiers.mechanics.thorns > 0 && e.lastAttackFrame === this.frameCount) {
@@ -403,13 +468,14 @@ class Game {
                 if (!e.active) {
                     this.enemiesKilled++;
                     this.score += e.scoreValue;
+                    this.tryDropPotion(e);
                     this.enemies.splice(i, 1);
                 }
             }
 
             // 5. Обновление снарядов
             this.projectiles.forEach(pr => {
-                pr.update(this.enemies, this.players, this.particles, this.relicModifiers, (amt) => this.shake(amt), this.firePuddles);
+                pr.update(this.enemies, this.getEnemyTargets(), this.particles, this.relicModifiers, (amt) => this.shake(amt), this.firePuddles);
             });
             this.projectiles = this.projectiles.filter(pr => pr.active);
 
@@ -479,6 +545,70 @@ class Game {
 
         // Обновляем систему частиц
         this.particles.update();
+    }
+
+    tryDropPotion(enemy) {
+        if (!enemy || enemy.isBoss) return;
+
+        const pityReady = this.potionKillsSinceDrop >= CONFIG.HEAL_POTION_PITY_KILLS;
+        const shouldDrop = pityReady || Math.random() <= CONFIG.HEAL_POTION_DROP_CHANCE;
+
+        if (!shouldDrop) {
+            this.potionKillsSinceDrop++;
+            return;
+        }
+
+        this.potionKillsSinceDrop = 0;
+
+        const x = enemy.x + enemy.width / 2 - 7;
+        const y = enemy.y + enemy.height / 2 - 7;
+        this.items.push(new HealthPotion(x, y));
+    }
+
+    triggerLastStand() {
+        if (this.lastStandRevivesUsed >= CONFIG.LAST_STAND_REVIVES_PER_WAVE) {
+            return false;
+        }
+
+        this.lastStandRevivesUsed++;
+        this.projectiles = this.projectiles.filter(pr => !pr.isEnemy);
+        this.cameraShake = Math.max(this.cameraShake, 12);
+
+        this.players.forEach((p, index) => {
+            p.active = true;
+            p.hp = Math.max(1, Math.round(p.maxHp * CONFIG.LAST_STAND_HP_RATIO));
+            p.damageReductionFrames = CONFIG.LAST_STAND_PROTECTION_FRAMES;
+            p.damageTakenMul = CONFIG.LAST_STAND_DAMAGE_TAKEN_MUL;
+            p.kbX = 0;
+            p.kbY = 0;
+            p.vx = 0;
+            p.vy = 0;
+
+            const angle = (Math.PI * 2 * index) / Math.max(1, this.players.length);
+            p.x = this.width / 2 + Math.cos(angle) * 90;
+            p.y = this.height / 2 + Math.sin(angle) * 70;
+
+            this.particles.spawnSpark(p.x + p.width / 2, p.y + p.height / 2, "#f1c40f", 18);
+            this.particles.spawnFloatingText(
+                p.x + p.width / 2,
+                p.y - 10,
+                `+${p.hp} HP`,
+                "#2ecc71",
+                true
+            );
+        });
+
+        this.particles.spawnFloatingText(
+            this.width / 2,
+            this.height / 2 - 95,
+            "ПОСЛЕДНИЙ ШАНС!",
+            "#f1c40f",
+            true,
+            true
+        );
+        this.addBattleLog('resurrect', 'ПОСЛЕДНИЙ ШАНС! Команда возвращается в бой.');
+
+        return true;
     }
 
     // Спавн одного врага
@@ -608,6 +738,11 @@ class Game {
 
     // Рендеринг всей игры
     draw() {
+        this.modeManager.draw(this.ctx);
+    }
+
+    drawCore(ctx = this.ctx) {
+        this.ctx = ctx;
         this.ctx.save();
 
         // 1. Применяем эффект тряски камеры
@@ -617,17 +752,25 @@ class Game {
             this.ctx.translate(dx, dy);
         }
 
-        // 2. Рисуем фон (зеленая трава)
-        this.ctx.fillStyle = "#3b7a57"; // Глубокий лесной зеленый
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        const isObsTransparent = typeof document !== 'undefined' &&
+            document.body &&
+            document.body.classList.contains('obs-mode');
 
-        // Рисуем текстуру земли (травинки)
-        this.ctx.fillStyle = "#2d5e41";
-        for (let x = 40; x < this.width; x += 160) {
-            for (let y = 30; y < this.height; y += 120) {
-                // Маленькие травинки
-                this.ctx.fillRect(x + (y % 17), y + (x % 13), 2, 6);
-                this.ctx.fillRect(x + (y % 17) - 3, y + (x % 13) + 2, 2, 4);
+        this.ctx.clearRect(0, 0, this.width, this.height);
+
+        if (!isObsTransparent) {
+            // 2. Рисуем фон (зеленая трава)
+            this.ctx.fillStyle = "#3b7a57"; // Глубокий лесной зеленый
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            // Рисуем текстуру земли (травинки)
+            this.ctx.fillStyle = "#2d5e41";
+            for (let x = 40; x < this.width; x += 160) {
+                for (let y = 30; y < this.height; y += 120) {
+                    // Маленькие травинки
+                    this.ctx.fillRect(x + (y % 17), y + (x % 13), 2, 6);
+                    this.ctx.fillRect(x + (y % 17) - 3, y + (x % 13) + 2, 2, 4);
+                }
             }
         }
 
@@ -648,6 +791,13 @@ class Game {
                 ctx.drawImage(img, d.x, d.y, d.width, d.height);
             }
         }));
+
+        if (this.defenseObjective && this.defenseObjective.active) {
+            sortedObjects.push({
+                y: this.defenseObjective.y + this.defenseObjective.height,
+                draw: (ctx) => this.defenseObjective.draw(ctx)
+            });
+        }
 
         // Игроки (включая могильные плиты для мертвых!)
         this.players.forEach(p => {
@@ -888,8 +1038,56 @@ class Game {
         this.ctx.fillText(line, x, currentY);
     }
 
-    // Обработка входящих команд
+    getHudState() {
+        return this.modeManager.getHudState();
+    }
+
+    getDefaultHudState() {
+        const isVoting = this.gameState === 'voting';
+        const remainingEnemies = Math.max(0, (this.waveEnemiesTotal - this.waveEnemiesSpawned) + this.enemies.length);
+        const aliveCount = this.players.filter(p => p.active).length;
+        const timeRemaining = Math.max(0, Math.ceil(((this.votingEndTime || Date.now()) - Date.now()) / 1000));
+
+        return {
+            modeId: this.modeId,
+            modeName: this.modeName,
+            waveLabel: `ВОЛНА: ${this.wave}`,
+            progressLabel: isVoting ? `ВЫБОР: ${timeRemaining} сек` : `ВРАГОВ: ${remainingEnemies}`,
+            progressAccent: isVoting ? 'voting' : 'combat',
+            aliveLabel: `В ЖИВЫХ: ${aliveCount} / ${this.players.length}`,
+            scoreLabel: `СЧЕТ: ${this.score}`,
+            objectiveLabel: null,
+            objectiveWarning: false
+        };
+    }
+
+    getResultState() {
+        return this.modeManager.getResultState();
+    }
+
+    getDefaultResultState() {
+        const min = Math.floor(this.timeElapsed / 60);
+        const sec = Math.floor(this.timeElapsed % 60);
+        const healers = this.players.filter(p => p.classType === 'healer');
+
+        return {
+            title: 'ВСЕ ПОГИБЛИ',
+            subtitle: 'Ваша команда пала под натиском монстров',
+            wave: this.wave,
+            time: `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`,
+            score: this.score,
+            healerHealing: Math.round(healers.reduce((sum, h) => sum + (h.healingDone || 0), 0)),
+            healerResurrects: healers.reduce((sum, h) => sum + (h.resurrectCount || 0), 0),
+            players: [...this.players].sort((a, b) => b.kills - a.kills)
+        };
+    }
+
     handleCommand(username, command, args, color) {
+        this.modeManager.handleCommand({ username, command, args, color });
+    }
+
+    // Обработка входящих команд
+    handleCoreCommand(username, command, args, color) {
         // Очищаем имя от спецсимволов IRC
         const cleanUser = username.replace(/[^a-zA-Z0-9_А-Яа-я]/g, '');
 

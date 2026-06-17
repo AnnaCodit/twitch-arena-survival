@@ -21,7 +21,7 @@ const CONFIG = {
             damage: 12,
             range: 45,        // Ме melee-атака
             cooldown: 50,     // Кадры между атаками (~0.8 сек при 60 FPS)
-            defense: 5,       // Снижение получаемого урона
+            defense: 7,       // Снижение получаемого урона
             color: "#e74c3c", // Красный (акцент для воина)
             bulletType: null, // Атака в ближнем бою
             maxWarriorsPerTarget: 3, // Максимальное число воинов на одну цель
@@ -29,7 +29,7 @@ const CONFIG = {
         },
         archer: {
             name: "Лучник",
-            maxHp: 60,
+            maxHp: 75,
             speed: 2.3,
             damage: 8.4,      // 70% от базового урона воина (12 * 0.7)
             range: 250,       // Дальний бой
@@ -41,7 +41,7 @@ const CONFIG = {
         },
         mage: {
             name: "Маг",
-            maxHp: 50,
+            maxHp: 70,
             speed: 1.6,
             damage: 20,
             range: 220,       // Дальний бой (АОЕ)
@@ -53,7 +53,7 @@ const CONFIG = {
         },
         healer: {
             name: "Целитель",
-            maxHp: 70,
+            maxHp: 85,
             speed: 2.0,
             damage: 7,        // Лечение (отрицательный урон или специальная обработка)
             range: 100,
@@ -167,18 +167,28 @@ const CONFIG = {
     XP_FACTOR: 35,
 
     // Шанс выпадения зелья здоровья при смерти врага (0.0 - 1.0)
-    HEAL_POTION_DROP_CHANCE: 0.15,
-    HEAL_POTION_VALUE: 25, // Сколько HP восстанавливает зелье
-    HEAL_POTION_MAGNET_RANGE: 120, // Радиус притяжения зелья к игроку
+    HEAL_POTION_DROP_CHANCE: 0.30,
+    HEAL_POTION_VALUE: 35, // Сколько HP восстанавливает зелье
+    HEAL_POTION_MAGNET_RANGE: 180, // Радиус притяжения зелья к игроку
     HEAL_POTION_SPEED: 5.0, // Скорость притягивания
+    HEAL_POTION_PITY_KILLS: 8, // После N убийств без зелья следующий дроп гарантирован
 
     // Настройки волн
     WAVES: {
-        spawnDelay: 45, // Задержка между спавном монстров (в кадрах)
+        spawnDelay: 55, // Задержка между спавном монстров (в кадрах)
         bossInterval: 10, // Каждую N волну спавнится Босс
-        baseCount: 4, // Базовое количество врагов на 1 волне
+        baseCount: 3, // Базовое количество врагов на 1 волне
         countPerWave: 2 // Сколько врагов добавляется с каждой новой волной
     },
+
+    ENEMY_WAVE_DAMAGE_SCALE: 0.10,
+    ENEMY_WAVE_HP_SCALE: 0.12,
+    EARLY_WAVE_DAMAGE_MUL: 0.75, // Смягчение урона на волнах 1-3
+
+    LAST_STAND_REVIVES_PER_WAVE: 1,
+    LAST_STAND_HP_RATIO: 0.35,
+    LAST_STAND_PROTECTION_FRAMES: 180,
+    LAST_STAND_DAMAGE_TAKEN_MUL: 0.20,
 
     // Настройки реликвий и вероятностей их редкости
     RARITIES: {

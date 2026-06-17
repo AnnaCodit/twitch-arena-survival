@@ -52,8 +52,26 @@
                 <ul>
                     <li><span>!join / !войти / !играть [класс]</span> — войти в игру (воин, маг, лучник, хилер/клирик)</li>
                     <li><span>!class / !класс [класс]</span> — сменить класс на следующую волну</li>
-                    <li><span>1 / 2 / 3</span> — проголосовать за реликвию (просто цифра в чат)</li>
+                    <li><span>1 / 2 / 3 / 4</span> — проголосовать за реликвию (просто цифра в чат)</li>
                 </ul>
+            </div>
+
+            <!-- Выбор игрового режима -->
+            <div class="mode-select-box">
+                <div class="box-header">
+                    <span>Режим игры:</span>
+                    <span id="selected-mode-label" class="count-badge">SURVIVAL</span>
+                </div>
+                <div class="mode-options">
+                    <button type="button" class="mode-option active" data-mode="survival">
+                        <strong>Survival</strong>
+                        <span>Классические волны и голосование за реликвии</span>
+                    </button>
+                    <button type="button" class="mode-option" data-mode="defense">
+                        <strong>Defense</strong>
+                        <span>Защитите кристалл от монстров</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Кнопки управления стримера -->
@@ -76,6 +94,7 @@
             <div id="overlay-wave" class="hud-panel pixel-text">ВОЛНА: 0</div>
             <div id="overlay-wave-progress" class="hud-panel pixel-text">ВРАГИ: 0</div>
             <div id="overlay-alive" class="hud-panel pixel-text">В ЖИВЫХ: 0 / 0</div>
+            <div id="overlay-objective" class="hud-panel pixel-text hidden">КРИСТАЛЛ: 0 / 0</div>
             <div id="overlay-score" class="hud-panel pixel-text">СЧЕТ: 0</div>
         </div>
 
@@ -119,8 +138,8 @@
     <!-- 3. ЭКРАН КОНЦА ИГРЫ (GAME OVER) -->
     <div id="gameover-screen" class="screen hidden" style="display: none;">
         <div class="gameover-card glass">
-            <h1 class="pixel-glow danger">ВСЕ ПОГИБЛИ</h1>
-            <p class="subtitle">Ваша команда пала под натиском монстров</p>
+            <h1 id="gameover-title" class="pixel-glow danger">ВСЕ ПОГИБЛИ</h1>
+            <p id="gameover-subtitle" class="subtitle">Ваша команда пала под натиском монстров</p>
 
             <!-- Основные метрики -->
             <div class="metrics-row">
@@ -181,6 +200,7 @@
     <script src="src/particles.js"></script>
     <script src="src/twitch.js"></script>
     <script src="src/entities.js"></script>
+    <script src="src/modes.js"></script>
     <script src="src/game.js"></script>
     <script src="src/ui.js"></script>
 </body>

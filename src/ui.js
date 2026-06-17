@@ -50,6 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const lobbyCount = document.getElementById('lobby-players-count');
     const btnSimulateJoin = document.getElementById('btn-sim-join');
     const btnStartGame = document.getElementById('btn-start-game');
+    const modeButtons = document.querySelectorAll('.mode-option');
+    const selectedModeLabel = document.getElementById('selected-mode-label');
+    let selectedMode = 'survival';
 
     // Восстанавливаем сохраненное имя канала из localStorage
     const savedChannel = localStorage.getItem('twitch_channel_name');
@@ -61,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const waveDisplay = document.getElementById('overlay-wave');
     const waveProgressDisplay = document.getElementById('overlay-wave-progress');
     const aliveDisplay = document.getElementById('overlay-alive');
+    const objectiveDisplay = document.getElementById('overlay-objective');
     const scoreDisplay = document.getElementById('overlay-score');
     
     // Симулятор чата
@@ -81,6 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statHealerRes = document.getElementById('stat-healer-res');
     const statTableBody = document.getElementById('stats-table-body');
     const btnRestart = document.getElementById('btn-restart');
+    const gameoverTitle = document.getElementById('gameover-title');
+    const gameoverSubtitle = document.getElementById('gameover-subtitle');
 
     // Переменные автосимулятора чата
     let autoChatInterval = null;
@@ -100,24 +106,30 @@ document.addEventListener('DOMContentLoaded', () => {
             game.draw();
             
             // Обновляем игровые оверлеи
-            waveDisplay.textContent = `ВОЛНА: ${game.wave}`;
+            const hudState = game.getHudState();
+            waveDisplay.textContent = hudState.waveLabel;
+            waveProgressDisplay.textContent = hudState.progressLabel;
             
             // Количество врагов или таймер голосования
-            if (game.gameState === 'playing') {
-                const remainingEnemies = Math.max(0, (game.waveEnemiesTotal - game.waveEnemiesSpawned) + game.enemies.length);
-                waveProgressDisplay.textContent = `ВРАГОВ: ${remainingEnemies}`;
+            if (hudState.progressAccent === 'combat') {
                 waveProgressDisplay.style.borderColor = 'var(--color-primary)';
                 waveProgressDisplay.style.textShadow = '0 0 5px var(--color-primary-glow)';
-            } else if (game.gameState === 'voting') {
-                const timeRemaining = Math.max(0, Math.ceil((game.votingEndTime - Date.now()) / 1000));
-                waveProgressDisplay.textContent = `ВЫБОР: ${timeRemaining} сек`;
+            } else if (hudState.progressAccent === 'voting') {
                 waveProgressDisplay.style.borderColor = '#e67e22';
                 waveProgressDisplay.style.textShadow = '0 0 5px rgba(230, 126, 34, 0.4)';
             }
 
-            const aliveCount = game.players.filter(p => p.active).length;
-            aliveDisplay.textContent = `В ЖИВЫХ: ${aliveCount} / ${game.players.length}`;
-            scoreDisplay.textContent = `СЧЕТ: ${game.score}`;
+            aliveDisplay.textContent = hudState.aliveLabel;
+            scoreDisplay.textContent = hudState.scoreLabel;
+
+            if (hudState.objectiveLabel) {
+                objectiveDisplay.textContent = hudState.objectiveLabel;
+                objectiveDisplay.classList.remove('hidden');
+                objectiveDisplay.classList.toggle('warning', Boolean(hudState.objectiveWarning));
+            } else {
+                objectiveDisplay.classList.add('hidden');
+                objectiveDisplay.classList.remove('warning');
+            }
 
             // Скрываем/показываем оверлеи в зависимости от режима OBS
             if (document.body.classList.contains('obs-mode')) {
@@ -128,40 +140,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 isGameOverScreenShown = true;
                 // Переключаемся на экран конца игры
                 showScreen('gameover');
+                const result = game.getResultState();
+                gameoverTitle.textContent = result.title;
+                gameoverSubtitle.textContent = result.subtitle;
                 
                 // Заполняем статистику
-                statWave.textContent = game.wave.toString();
-                
-                // Форматируем время в ММ:СС
-                const min = Math.floor(game.timeElapsed / 60);
-                const sec = Math.floor(game.timeElapsed % 60);
-                statTime.textContent = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-                
-                statScore.textContent = game.score.toString();
-
-                // Подсчет статистики хилеров
-                const healers = game.players.filter(p => p.classType === 'healer');
-                const totalHealerHealing = healers.reduce((sum, h) => sum + (h.healingDone || 0), 0);
-                const totalHealerResurrects = healers.reduce((sum, h) => sum + (h.resurrectCount || 0), 0);
-                
-                statHealerHeal.textContent = Math.round(totalHealerHealing).toString();
-                statHealerRes.textContent = totalHealerResurrects.toString();
+                statWave.textContent = result.wave.toString();
+                statTime.textContent = result.time;
+                statScore.textContent = result.score.toString();
+                statHealerHeal.textContent = result.healerHealing.toString();
+                statHealerRes.textContent = result.healerResurrects.toString();
 
                 // Генерируем таблицу игроков
                 statTableBody.innerHTML = '';
-                // Сортируем игроков по количеству убийств
-                const sortedPlayers = [...game.players].sort((a, b) => b.kills - a.kills);
-
-                sortedPlayers.forEach(p => {
+                result.players.forEach(p => {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td style="color: ${p.color}; font-weight: bold;">${p.username}</td>
-                        <td>${CONFIG.CLASSES[p.classType].name}</td>
-                        <td>${p.level}</td>
-                        <td class="stat-kills">${p.kills}</td>
-                        <td>${Math.round(p.damageDealt)}</td>
-                        <td>${Math.round(p.healingDone)}</td>
-                    `;
+                    const usernameTd = document.createElement('td');
+                    usernameTd.style.color = p.color;
+                    usernameTd.style.fontWeight = 'bold';
+                    usernameTd.textContent = p.username;
+
+                    const classTd = document.createElement('td');
+                    classTd.textContent = CONFIG.CLASSES[p.classType].name;
+
+                    const levelTd = document.createElement('td');
+                    levelTd.textContent = p.level.toString();
+
+                    const killsTd = document.createElement('td');
+                    killsTd.className = 'stat-kills';
+                    killsTd.textContent = p.kills.toString();
+
+                    const damageTd = document.createElement('td');
+                    damageTd.textContent = Math.round(p.damageDealt).toString();
+
+                    const healingTd = document.createElement('td');
+                    healingTd.textContent = Math.round(p.healingDone).toString();
+
+                    tr.appendChild(usernameTd);
+                    tr.appendChild(classTd);
+                    tr.appendChild(levelTd);
+                    tr.appendChild(killsTd);
+                    tr.appendChild(damageTd);
+                    tr.appendChild(healingTd);
                     statTableBody.appendChild(tr);
                 });
             }
@@ -191,6 +211,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // По умолчанию показываем лобби
     showScreen('lobby');
+
+    modeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedMode = btn.dataset.mode || 'survival';
+            modeButtons.forEach(other => other.classList.toggle('active', other === btn));
+            if (selectedModeLabel) {
+                selectedModeLabel.textContent = selectedMode.toUpperCase();
+            }
+        });
+    });
 
 
     // -------------------------------------------------------------
@@ -271,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Начать игру
     btnStartGame.addEventListener('click', () => {
         showScreen('game');
-        game.startMatch();
+        game.startMatch(selectedMode);
     });
 
 
