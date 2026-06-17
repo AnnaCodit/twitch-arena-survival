@@ -83,6 +83,17 @@ const Game = require('../src/game.js');
 
 const game = new Game('game-canvas');
 
+let fallbackWarning = '';
+const originalWarn = console.warn;
+console.warn = (message) => {
+    fallbackWarning = String(message);
+};
+game.startMatch('missing-mode');
+console.warn = originalWarn;
+assert.strictEqual(game.modeId, 'survival');
+assert.ok(fallbackWarning.includes('falling back to "survival"'));
+
+game.returnToLobby();
 game.handleCommand('Alice', '!join', ['mage'], '#ffffff');
 assert.strictEqual(game.lobbyUsers.get('Alice'), 'mage');
 
