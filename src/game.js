@@ -454,7 +454,12 @@ class Game {
                 e.update(enemyTargets, this.frameCount, this.particles, (amt) => this.shake(amt), this.projectiles);
                 
                 // Проверяем шипы (возврат урона)
-                if (e.active && this.relicModifiers.mechanics.thorns > 0 && e.lastAttackFrame === this.frameCount) {
+                if (
+                    e.active &&
+                    this.relicModifiers.mechanics.thorns > 0 &&
+                    e.lastAttackFrame === this.frameCount &&
+                    e.lastAttackedTarget instanceof Player
+                ) {
                     // Враг только что ударил игрока, вернем ему часть урона
                     const thornsDmg = e.damage * this.relicModifiers.mechanics.thorns;
                     e.takeDamage(thornsDmg, "Шипы", this.particles);

@@ -151,11 +151,14 @@ game.players = [];
 game.enemies = [
     new Enemy(game.defenseObjective.x - 40, game.defenseObjective.y, 'goblin', 1, 1)
 ];
+game.relicModifiers.mechanics.thorns = 1.0;
+const crystalAttackerHp = game.enemies[0].hp;
 for (let i = 0; i < 180; i++) {
     game.update();
 }
 assert.ok(['playing', 'voting'].includes(game.gameState));
 assert.ok(game.defenseObjective.hp < game.defenseObjective.maxHp);
+assert.strictEqual(game.enemies[0].hp, crystalAttackerHp);
 
 game.defenseObjective.takeDamage(9999, 'Smoke', game.particles);
 game.gameState = 'playing';

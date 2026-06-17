@@ -826,6 +826,7 @@ class Enemy extends Entity {
         this.xpValue = baseStats.xpValue;
         this.scoreValue = baseStats.scoreValue;
         this.isBoss = baseStats.isBoss || false;
+        this.lastAttackedTarget = null;
     }
 
     // Поиск ближайшего живого игрока
@@ -876,6 +877,7 @@ class Enemy extends Entity {
                             // Конец заряда
                             this.isCharging = false;
                             this.lastAttackFrame = frameCount;
+                            this.lastAttackedTarget = null;
                             this.vx = 0;
                             this.vy = 0;
                         }
@@ -886,6 +888,7 @@ class Enemy extends Entity {
                 if (this.chargeTimer <= 0) {
                     this.isCharging = false;
                     this.lastAttackFrame = frameCount;
+                    this.lastAttackedTarget = null;
                 }
 
                 // Двигаемся и выходим из обычного ИИ
@@ -952,6 +955,7 @@ class Enemy extends Entity {
 
                 if (frameCount - this.lastAttackFrame >= this.cooldown) {
                     this.lastAttackFrame = frameCount;
+                    this.lastAttackedTarget = null;
                     this.pose = 'attack';
                     this.animTimer = 0;
 
@@ -970,6 +974,7 @@ class Enemy extends Entity {
                     } else {
                         // Наносим урон в ближнем бою
                         const actualDmg = target.takeDamage(this.damage * (0.8 + Math.random() * 0.4), this.name, particleEngine);
+                        this.lastAttackedTarget = target;
 
                         // Эффект шипов (легендарная реликвия игроков)
                         if (actualDmg > 0 && target.active && target.auras && target.auras.legendary) {
