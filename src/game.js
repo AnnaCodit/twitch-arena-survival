@@ -474,8 +474,9 @@ class Game {
             }
 
             // 5. Обновление снарядов
+            const projectileTargets = this.getEnemyTargets();
             this.projectiles.forEach(pr => {
-                pr.update(this.enemies, this.getEnemyTargets(), this.particles, this.relicModifiers, (amt) => this.shake(amt), this.firePuddles);
+                pr.update(this.enemies, projectileTargets, this.particles, this.relicModifiers, (amt) => this.shake(amt), this.firePuddles);
             });
             this.projectiles = this.projectiles.filter(pr => pr.active);
 
