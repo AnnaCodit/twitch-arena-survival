@@ -145,6 +145,47 @@ assert.strictEqual(game.chatEventState.lastEffect, null);
 game.startRelicVoting();
 game.handleCommand('Alice', '4', [], '#ffffff');
 assert.strictEqual(game.relicVotes[4], 1);
+const fourthRelic = game.relicsToVote[3];
+assert.strictEqual(game.debugEndVotingWithOption(4), true);
+assert.ok(game.activeRelics.includes(fourthRelic));
+
+const mage = new Player(100, 100, 'MageSmoke', 'mage', {});
+assert.strictEqual(mage.maxShield, CONFIG.CLASSES.mage.shield);
+assert.strictEqual(mage.shield, mage.maxShield);
+mage.takeDamage(10, 'Smoke', null);
+assert.strictEqual(mage.hp, mage.maxHp);
+assert.strictEqual(mage.shield, mage.maxShield - 10);
+mage.takeDamage(30, 'Smoke', null);
+assert.strictEqual(mage.shield, 0);
+assert.ok(mage.hp < mage.maxHp);
+mage.restoreRoundShield();
+assert.strictEqual(mage.shield, mage.maxShield);
+
+const projectileTarget = new Enemy(150, 100, 'slime', 1, 1, {});
+const mageProjectiles = [];
+mage.performAttack(projectileTarget, [projectileTarget], mageProjectiles, null, {});
+mage.performAttack(projectileTarget, [projectileTarget], mageProjectiles, null, {});
+assert.deepStrictEqual(mageProjectiles.map(projectile => projectile.type), ['fireball', 'frostball']);
+
+const fireTarget = new Enemy(200, 100, 'slime', 1, 1, {});
+const firePuddles = [];
+new Projectile(200, 100, fireTarget, mage, 'fireball', mage.damage, 4.2).hitEnemy(fireTarget, [fireTarget], null, {}, null, firePuddles);
+assert.ok(fireTarget.hp < fireTarget.maxHp);
+assert.strictEqual(firePuddles.length, 1);
+
+const overlapA = new Enemy(300, 100, 'slime', 1, 1, {});
+const overlapB = new Enemy(300, 100, 'slime', 1, 1, {});
+const overlapPuddles = [];
+const overlapProjectile = new Projectile(300, 100, overlapA, mage, 'fireball', mage.damage, 4.2);
+overlapProjectile.update([overlapA, overlapB], [], null, {}, null, overlapPuddles);
+const damagedOverlapTargets = [overlapA, overlapB].filter(enemy => enemy.hp < enemy.maxHp).length;
+assert.strictEqual(damagedOverlapTargets, 1);
+assert.strictEqual(overlapPuddles.length, 1);
+
+const frostTarget = new Enemy(250, 100, 'slime', 1, 1, {});
+new Projectile(250, 100, frostTarget, mage, 'frostball', mage.damage, 4.2).hitEnemy(frostTarget, [frostTarget], null, {}, null, []);
+assert.strictEqual(frostTarget.frozenFrames, CONFIG.MAGE_FROST_FREEZE_FRAMES);
+assert.ok(frostTarget.getCurrentSpeed() < frostTarget.speed);
 
 game.gameState = 'playing';
 game.lastStandRevivesUsed = 0;
@@ -167,10 +208,18 @@ assert.strictEqual(game.waveEnemiesSpawned, totalBeforeDebugSpawn);
 assert.strictEqual(game.debugClearEnemies(), true);
 assert.strictEqual(game.enemies.length, 0);
 
+const waveMage = new Player(100, 100, 'WaveMageSmoke', 'mage', {});
+game.players = [waveMage];
+waveMage.takeDamage(12, 'Smoke', null);
+assert.ok(waveMage.shield < waveMage.maxShield);
+assert.strictEqual(game.debugStartNextWave(), true);
+assert.strictEqual(waveMage.shield, waveMage.maxShield);
+
 game.players.forEach(player => {
     player.active = false;
     player.hp = 0;
 });
+game.lastStandRevivesUsed = CONFIG.LAST_STAND_REVIVES_PER_WAVE;
 game.update();
 assert.strictEqual(game.gameState, 'gameover');
 assert.strictEqual(game.gameOverReason, 'players');

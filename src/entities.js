@@ -208,6 +208,9 @@ class Player extends Entity {
         // Характеристики огненных луж мага
         this.puddleRadiusMul = 1.0;
         this.puddleDurationAdd = 0;
+        this.maxShield = 0;
+        this.shield = 0;
+        this.mageNextElement = 'fireball';
         this.damageReductionFrames = 0;
         this.damageTakenMul = 1.0;
 
@@ -216,11 +219,12 @@ class Player extends Entity {
 
         // Применяем глобальные реликвии, которые уже открыты
         this.applyRelicModifiers(globalRelicMods);
+        this.restoreRoundShield();
     }
 
     // Применение модификаторов от реликвий
     applyRelicModifiers(mods) {
-        if (!mods) return;
+        if (!mods) mods = {};
 
         const baseStats = CONFIG.CLASSES[this.classType];
 
@@ -233,6 +237,8 @@ class Player extends Entity {
         this.defense = baseStats.defense + (growth.defense || 0) * lvlBonus;
         this.range = baseStats.range + (growth.range || 0) * lvlBonus;
         this.cooldown = baseStats.cooldown;
+        this.maxShield = baseStats.shield ? baseStats.shield + (growth.shield || 0) * lvlBonus : 0;
+        if (this.shield > this.maxShield) this.shield = this.maxShield;
 
         // Применяем коэффициенты от реликвий
         // Модификаторы для конкретного класса
@@ -274,10 +280,38 @@ class Player extends Entity {
         if (this.hp > this.maxHp) this.hp = this.maxHp;
     }
 
+    restoreRoundShield() {
+        this.shield = this.classType === 'mage' ? this.maxShield : 0;
+        if (this.classType !== 'mage') {
+            this.mageNextElement = 'fireball';
+        }
+    }
+
     takeDamage(amount, attackerName, particleEngine) {
         let incomingAmount = amount;
         if (this.damageReductionFrames > 0) {
             incomingAmount *= this.damageTakenMul;
+        }
+
+        let shieldAbsorbed = 0;
+        if (this.maxShield > 0 && this.shield > 0) {
+            shieldAbsorbed = Math.min(this.shield, Math.max(0, incomingAmount));
+            this.shield -= shieldAbsorbed;
+            incomingAmount -= shieldAbsorbed;
+
+            if (particleEngine && shieldAbsorbed > 0) {
+                particleEngine.spawnSpark(this.x + this.width / 2, this.y + this.height / 2, "#5dade2", 4);
+                particleEngine.spawnFloatingText(
+                    this.x + this.width / 2,
+                    this.y - 6,
+                    `-${Math.round(shieldAbsorbed)}`,
+                    "#5dade2"
+                );
+            }
+
+            if (incomingAmount <= 0) {
+                return Math.round(shieldAbsorbed);
+            }
         }
 
         if (this.classType === 'warrior') {
@@ -295,7 +329,7 @@ class Player extends Entity {
                 return 0; // Заблокировали весь урон!
             }
         }
-        return super.takeDamage(incomingAmount, attackerName, particleEngine);
+        return shieldAbsorbed + super.takeDamage(incomingAmount, attackerName, particleEngine);
     }
 
     // Получение опыта за убийства
@@ -732,13 +766,14 @@ class Player extends Entity {
             proj.isCrit = isCrit;
             projectiles.push(proj);
         } else if (this.classType === 'mage') {
-            // Маг пускает огненный шар
+            const projectileType = this.mageNextElement === 'frostball' ? 'frostball' : 'fireball';
+            this.mageNextElement = projectileType === 'fireball' ? 'frostball' : 'fireball';
             projectiles.push(new Projectile(
                 this.x + this.width / 2,
                 this.y + this.height / 2,
                 target,
                 this,
-                'fireball',
+                projectileType,
                 finalDamage,
                 4.2
             ));
@@ -781,6 +816,8 @@ class Player extends Entity {
         ctx.font = '7px "Press Start 2P", monospace';
         ctx.fillText(`L${this.level}`, this.x + this.width / 2, this.y - 28);
 
+        this.drawMageShield(ctx);
+
         // Индикатор паники/убегания для воина
         if (this.classType === 'warrior' && this.isFleeing) {
             ctx.fillStyle = "#e74c3c";
@@ -800,6 +837,31 @@ class Player extends Entity {
             const shieldX2 = this.x + this.width / 2 + Math.cos(time + Math.PI) * shieldRadius;
             const shieldY2 = this.y + this.height / 2 + Math.sin(time + Math.PI) * shieldRadius;
             ctx.fillRect(shieldX2 - 2, shieldY2 - 2, 4, 4);
+        }
+    }
+    drawMageShield(ctx) {
+        if (this.maxShield <= 0) return;
+
+        const barW = this.width;
+        const barH = 3;
+        const barX = this.x;
+        const barY = this.y - 13;
+        const shieldPercent = Math.max(0, this.shield) / this.maxShield;
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = "#5dade2";
+        ctx.fillRect(barX, barY, barW * shieldPercent, barH);
+
+        if (this.shield > 0) {
+            ctx.save();
+            ctx.globalAlpha = 0.35;
+            ctx.strokeStyle = "#5dade2";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, 17, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
         }
     }
 }
@@ -827,11 +889,23 @@ class Enemy extends Entity {
         this.scoreValue = baseStats.scoreValue;
         this.isBoss = baseStats.isBoss || false;
         this.lastAttackedTarget = null;
+        this.frozenFrames = 0;
+    }
+
+    getCurrentSpeed() {
+        return this.speed * (this.frozenFrames > 0 ? CONFIG.MAGE_FROST_SPEED_MUL : 1.0);
     }
 
     // Поиск ближайшего живого игрока
     update(players, frameCount, particleEngine, gameCameraShake, projectiles) {
         if (!this.active) return;
+
+        if (this.frozenFrames > 0) {
+            this.frozenFrames--;
+            if (particleEngine && frameCount % 12 === 0) {
+                particleEngine.spawnSpark(this.x + this.width / 2, this.y + this.height / 2, "#5dade2", 1);
+            }
+        }
 
         // Логика разбега и отбрасывания для Быка (bull)
         if (this.enemyType === 'bull') {
@@ -934,8 +1008,9 @@ class Enemy extends Entity {
             if (this.enemyType === 'bull' && frameCount - this.lastAttackFrame >= this.cooldown) {
                 this.isCharging = true;
                 this.chargeTimer = 45;
-                this.chargeVx = (dx / dist) * this.speed * 4.5;
-                this.chargeVy = (dy / dist) * this.speed * 4.5;
+                const currentSpeed = this.getCurrentSpeed();
+                this.chargeVx = (dx / dist) * currentSpeed * 4.5;
+                this.chargeVy = (dy / dist) * currentSpeed * 4.5;
                 if (particleEngine) {
                     particleEngine.spawnFloatingText(this.x + this.width / 2, this.y, "РАЗБЕГ!", "#e67e22", true);
                 }
@@ -944,8 +1019,9 @@ class Enemy extends Entity {
 
             if (dist > this.range * 0.9) {
                 // Бежим к цели
-                this.vx = (dx / dist) * this.speed;
-                this.vy = (dy / dist) * this.speed;
+                const currentSpeed = this.getCurrentSpeed();
+                this.vx = (dx / dist) * currentSpeed;
+                this.vy = (dy / dist) * currentSpeed;
                 this.pose = 'walk';
             } else {
                 // Атакуем вплотную или с дистанции
@@ -1065,7 +1141,7 @@ class Projectile {
         this.y = startY;
         this.target = target;
         this.owner = owner; // Кто выпустил
-        this.type = type; // 'arrow', 'fireball', 'healball', 'stone'
+        this.type = type; // 'arrow', 'fireball', 'frostball', 'healball', 'stone'
         this.damage = damage;
         this.speed = speed;
         this.isEnemy = isEnemy; // Флаг: вражеский ли снаряд
@@ -1122,7 +1198,7 @@ class Projectile {
 
         // Спавним следы магии/пыли
         if (particleEngine && Math.random() < 0.3) {
-            const traceColor = this.type === 'fireball' ? "#f39c12" : (this.type === 'healball' ? "#2ecc71" : "#bdc3c7");
+            const traceColor = this.type === 'fireball' ? "#f39c12" : (this.type === 'frostball' ? "#5dade2" : (this.type === 'healball' ? "#2ecc71" : "#bdc3c7"));
             particleEngine.spawnSpark(this.x, this.y, traceColor, 1);
         }
 
@@ -1156,7 +1232,7 @@ class Projectile {
         } else {
             // Боевой снаряд ищет коллизии с врагами
             enemies.forEach(e => {
-                if (e.active && this.checkCollision(e)) {
+                if (this.active && e.active && this.checkCollision(e)) {
                     this.hitEnemy(e, enemies, particleEngine, globalMods, shakeScreen, firePuddles);
                 }
             });
@@ -1184,6 +1260,22 @@ class Projectile {
                 particleEngine.spawnSpark(this.x, this.y, "#f1c40f", 8);
             }
 
+            const actualDmg = enemy.takeDamage(
+                this.damage * CONFIG.MAGE_FIRE_IMPACT_MUL * (0.9 + Math.random() * 0.2),
+                this.owner?.username || "Маг",
+                particleEngine
+            );
+            if (this.owner) {
+                this.owner.damageDealt += actualDmg;
+                if (!enemy.active) {
+                    this.owner.kills++;
+                    this.owner.gainXp(enemy.xpValue, particleEngine, globalMods);
+                }
+            }
+            if (this.owner && globalMods && globalMods['mechanics'] && globalMods['mechanics'].lifesteal) {
+                this.owner.heal(actualDmg * globalMods['mechanics'].lifesteal, particleEngine);
+            }
+
             // Спавним огненную лужу на земле
             if (firePuddles && this.owner) {
                 const radius = 50 * (this.owner.puddleRadiusMul || 1.0);
@@ -1198,6 +1290,32 @@ class Projectile {
                     tickDamage,
                     this.owner
                 ));
+            }
+        } else if (this.type === 'frostball') {
+            this.active = false;
+
+            if (particleEngine) {
+                particleEngine.spawnSpark(this.x, this.y, "#5dade2", 14);
+                particleEngine.spawnSpark(this.x, this.y, "#ecf9ff", 6);
+                particleEngine.spawnFloatingText(this.x, this.y - 8, "FROST", "#5dade2", true);
+            }
+
+            const actualDmg = enemy.takeDamage(
+                this.damage * CONFIG.MAGE_FROST_IMPACT_MUL * (0.9 + Math.random() * 0.2),
+                this.owner?.username || "Маг",
+                particleEngine
+            );
+            enemy.frozenFrames = Math.max(enemy.frozenFrames || 0, CONFIG.MAGE_FROST_FREEZE_FRAMES);
+
+            if (this.owner) {
+                this.owner.damageDealt += actualDmg;
+                if (!enemy.active) {
+                    this.owner.kills++;
+                    this.owner.gainXp(enemy.xpValue, particleEngine, globalMods);
+                }
+            }
+            if (this.owner && globalMods && globalMods['mechanics'] && globalMods['mechanics'].lifesteal) {
+                this.owner.heal(actualDmg * globalMods['mechanics'].lifesteal, particleEngine);
             }
         } else {
             // Обычная стрела лучника (или камень гоблина)

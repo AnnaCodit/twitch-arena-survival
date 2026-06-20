@@ -466,6 +466,9 @@ class Game {
                 p.applyRelicModifiers(this.relicModifiers);
                 p.hp = p.maxHp;
             }
+            if (typeof p.restoreRoundShield === 'function') {
+                p.restoreRoundShield();
+            }
             p.classChangedThisWave = false;
         });
 

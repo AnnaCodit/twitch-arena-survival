@@ -12,6 +12,11 @@ const CONFIG = {
     // Частота кадров (целевая)
     FPS: 60,
 
+    MAGE_FIRE_IMPACT_MUL: 0.45,
+    MAGE_FROST_IMPACT_MUL: 0.35,
+    MAGE_FROST_FREEZE_FRAMES: 75,
+    MAGE_FROST_SPEED_MUL: 0.45,
+
     // Настройки баланса игроков по классам
     CLASSES: {
         warrior: {
@@ -42,6 +47,7 @@ const CONFIG = {
         mage: {
             name: "Маг",
             maxHp: 70,
+            shield: 18,
             speed: 1.6,
             damage: 20,
             range: 220,       // Дальний бой (АОЕ)
@@ -49,7 +55,7 @@ const CONFIG = {
             defense: 0,
             color: "#9b59b6", // Фиолетовый
             bulletType: "fireball",
-            growth: { maxHp: 5, damage: 2.5, range: 5 }
+            growth: { maxHp: 5, shield: 2, damage: 2.5, range: 5 }
         },
         healer: {
             name: "Целитель",

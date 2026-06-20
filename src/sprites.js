@@ -39,6 +39,7 @@ const Sprites = {
         // Снаряды
         this.projectiles['arrow'] = this.createArrow();
         this.projectiles['fireball'] = this.createMagicOrb("#e74c3c", "#f39c12");
+        this.projectiles['frostball'] = this.createMagicOrb("#5dade2", "#ecf9ff");
         this.projectiles['healball'] = this.createMagicOrb("#2ecc71", "#ecf0f1");
         this.projectiles['stone'] = this.createStone();
 
