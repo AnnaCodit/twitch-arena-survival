@@ -133,10 +133,12 @@ body {
 
 .lobby-card {
     width: 650px;
+    max-height: 100vh;
     padding: 40px;
     display: flex;
     flex-direction: column;
     gap: 24px;
+    overflow-y: auto;
 }
 
 .gameover-card {
@@ -360,7 +362,8 @@ input[type="text"]:focus {
     font-size: 8px;
     color: #ffffff;
     display: inline-block;
-    width: 120px;
+    min-width: 142px;
+    margin-right: 8px;
 }
 
 .action-row {
@@ -427,6 +430,8 @@ input[type="text"]:focus {
     right: 20px;
     display: flex;
     justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
     pointer-events: none; /* Пропускаем клики мыши сквозь оверлей */
     z-index: 5;
 }
@@ -441,6 +446,7 @@ input[type="text"]:focus {
     color: #ffffff;
     letter-spacing: 1px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    white-space: nowrap;
 }
 
 #overlay-wave {
@@ -451,6 +457,16 @@ input[type="text"]:focus {
 #overlay-alive {
     border-color: var(--color-accent);
     text-shadow: 0 0 5px var(--color-accent-glow);
+}
+
+#overlay-chat-power {
+    border-color: var(--color-success);
+    text-shadow: 0 0 5px var(--color-success-glow);
+}
+
+#overlay-chat-power.cooldown {
+    border-color: #e67e22;
+    text-shadow: 0 0 5px rgba(230, 126, 34, 0.4);
 }
 
 #overlay-score {
@@ -776,6 +792,11 @@ body.obs-mode #game-container {
 .battle-log-item.resurrect {
     color: #f1c40f;
     text-shadow: 0 0 5px rgba(241, 196, 15, 0.3);
+}
+
+.battle-log-item.chat {
+    color: #00f0ff;
+    text-shadow: 0 0 5px var(--color-accent-glow);
 }
 
 @keyframes fadeInLog {

@@ -21,7 +21,7 @@ const CONFIG = {
             damage: 12,
             range: 45,        // Ме melee-атака
             cooldown: 50,     // Кадры между атаками (~0.8 сек при 60 FPS)
-            defense: 5,       // Снижение получаемого урона
+            defense: 7,       // Снижение получаемого урона
             color: "#e74c3c", // Красный (акцент для воина)
             bulletType: null, // Атака в ближнем бою
             maxWarriorsPerTarget: 3, // Максимальное число воинов на одну цель
@@ -29,7 +29,7 @@ const CONFIG = {
         },
         archer: {
             name: "Лучник",
-            maxHp: 60,
+            maxHp: 75,
             speed: 2.3,
             damage: 8.4,      // 70% от базового урона воина (12 * 0.7)
             range: 250,       // Дальний бой
@@ -41,7 +41,7 @@ const CONFIG = {
         },
         mage: {
             name: "Маг",
-            maxHp: 50,
+            maxHp: 70,
             speed: 1.6,
             damage: 20,
             range: 220,       // Дальний бой (АОЕ)
@@ -53,7 +53,7 @@ const CONFIG = {
         },
         healer: {
             name: "Целитель",
-            maxHp: 70,
+            maxHp: 85,
             speed: 2.0,
             damage: 7,        // Лечение (отрицательный урон или специальная обработка)
             range: 100,
@@ -167,18 +167,89 @@ const CONFIG = {
     XP_FACTOR: 35,
 
     // Шанс выпадения зелья здоровья при смерти врага (0.0 - 1.0)
-    HEAL_POTION_DROP_CHANCE: 0.15,
-    HEAL_POTION_VALUE: 25, // Сколько HP восстанавливает зелье
-    HEAL_POTION_MAGNET_RANGE: 120, // Радиус притяжения зелья к игроку
+    HEAL_POTION_DROP_CHANCE: 0.30,
+    HEAL_POTION_VALUE: 35, // Сколько HP восстанавливает зелье
+    HEAL_POTION_MAGNET_RANGE: 180, // Радиус притяжения зелья к игроку
     HEAL_POTION_SPEED: 5.0, // Скорость притягивания
+    HEAL_POTION_PITY_KILLS: 8, // После N убийств без зелья следующий дроп гарантирован
 
     // Настройки волн
     WAVES: {
-        spawnDelay: 45, // Задержка между спавном монстров (в кадрах)
+        spawnDelay: 55, // Задержка между спавном монстров (в кадрах)
         bossInterval: 10, // Каждую N волну спавнится Босс
-        baseCount: 4, // Базовое количество врагов на 1 волне
+        baseCount: 3, // Базовое количество врагов на 1 волне
         countPerWave: 2 // Сколько врагов добавляется с каждой новой волной
     },
+
+    ENEMY_WAVE_DAMAGE_SCALE: 0.10,
+    ENEMY_WAVE_HP_SCALE: 0.12,
+    EARLY_WAVE_DAMAGE_MUL: 0.75, // Смягчение урона на волнах 1-3
+
+    ADAPTIVE_DIFFICULTY: {
+        // Сглаживает рост от размера команды: 4 игрока дают ~3.4x вместо жестких 4x.
+        PLAYER_COUNT_EXPONENT: 0.88,
+        BOSS_PLAYER_HP_SCALE: 0.18,
+        BOSS_HP_MUL: 0.85,
+        BOSS_WAVE_COUNT_MUL: 0.65,
+        CLASS_WEIGHTS: {
+            warrior: { frontline: 1.20, sustain: 0.15, rangedDps: 0.55, aoeDps: 0.00, squishiness: 0.15 },
+            archer: { frontline: 0.05, sustain: 0.00, rangedDps: 1.00, aoeDps: 0.00, squishiness: 0.75 },
+            mage: { frontline: 0.00, sustain: 0.00, rangedDps: 0.75, aoeDps: 1.10, squishiness: 0.95 },
+            healer: { frontline: 0.15, sustain: 1.15, rangedDps: 0.20, aoeDps: 0.00, squishiness: 0.55 }
+        },
+        MIN_COUNT_MUL: 0.72,
+        MAX_COUNT_MUL: 1.18,
+        MIN_HP_MUL: 0.72,
+        MAX_HP_MUL: 1.18,
+        MIN_DAMAGE_MUL: 0.70,
+        MAX_DAMAGE_MUL: 1.12,
+        MIN_SPAWN_DELAY_MUL: 0.82,
+        MAX_SPAWN_DELAY_MUL: 1.35,
+        MIN_POTION_DROP_MUL: 0.90,
+        MAX_POTION_DROP_MUL: 1.75,
+        DIRECTOR_CHECK_FRAMES: 180,
+        STRUGGLE_HP_RATIO: 0.38,
+        STEAMROLL_HP_RATIO: 0.82
+    },
+
+    CHAT_EVENTS: {
+        CHARGE_MAX: 100,
+        CHARGE_PER_MESSAGE: 4,
+        EFFECT_COOLDOWN_FRAMES: 1500,
+        USER_COOLDOWN_FRAMES: 300,
+        MAX_PROCESSED_PER_TICK: 12,
+        MAX_PENDING_INTENTS: 160,
+        EFFECTS: {
+            heal: {
+                label: 'HEAL',
+                healRatio: 0.18,
+                minHeal: 12
+            },
+            bomb: {
+                label: 'BOMB',
+                damage: 70,
+                bossDamageMul: 0.18,
+                maxTargets: 8
+            },
+            slow: {
+                label: 'SLOW',
+                durationFrames: 420,
+                speedMul: 0.65,
+                maxTargets: 40
+            },
+            rally: {
+                label: 'RALLY',
+                durationFrames: 360,
+                damageMul: 1.12,
+                damageTakenMul: 0.82
+            }
+        }
+    },
+
+    LAST_STAND_REVIVES_PER_WAVE: 1,
+    LAST_STAND_HP_RATIO: 0.35,
+    LAST_STAND_PROTECTION_FRAMES: 180,
+    LAST_STAND_DAMAGE_TAKEN_MUL: 0.20,
 
     // Настройки реликвий и вероятностей их редкости
     RARITIES: {

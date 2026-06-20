@@ -224,6 +224,9 @@ class TwitchConnection {
                 text = `!class ${classes[Math.floor(Math.random() * classes.length)]}`;
             } else if (randomType < 0.8) {
                 text = Math.floor(1 + Math.random() * 4).toString(); // Просто цифра от 1 до 4
+            } else if (randomType < 0.9) {
+                const chatEvents = ["!heal", "!bomb", "!slow", "!rally", "!хил", "!бомба", "!замедлить", "!рывок"];
+                text = chatEvents[Math.floor(Math.random() * chatEvents.length)];
             } else {
                 const messages = [
                     "Всем привет!", "Давайте поднажмем!", "Сложная волна",

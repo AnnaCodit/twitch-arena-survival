@@ -52,7 +52,8 @@
                 <ul>
                     <li><span>!join / !войти / !играть [класс]</span> — войти в игру (воин, маг, лучник, хилер/клирик)</li>
                     <li><span>!class / !класс [класс]</span> — сменить класс на следующую волну</li>
-                    <li><span>1 / 2 / 3</span> — проголосовать за реликвию (просто цифра в чат)</li>
+                    <li><span>!heal / !bomb / !slow / !rally</span> — зарядить общий эффект чата</li>
+                    <li><span>1 / 2 / 3 / 4</span> — проголосовать за реликвию (просто цифра в чат)</li>
                 </ul>
             </div>
 
@@ -76,6 +77,7 @@
             <div id="overlay-wave" class="hud-panel pixel-text">ВОЛНА: 0</div>
             <div id="overlay-wave-progress" class="hud-panel pixel-text">ВРАГИ: 0</div>
             <div id="overlay-alive" class="hud-panel pixel-text">В ЖИВЫХ: 0 / 0</div>
+            <div id="overlay-chat-power" class="hud-panel pixel-text">CHAT: 0%</div>
             <div id="overlay-score" class="hud-panel pixel-text">СЧЕТ: 0</div>
         </div>
 
@@ -119,8 +121,8 @@
     <!-- 3. ЭКРАН КОНЦА ИГРЫ (GAME OVER) -->
     <div id="gameover-screen" class="screen hidden" style="display: none;">
         <div class="gameover-card glass">
-            <h1 class="pixel-glow danger">ВСЕ ПОГИБЛИ</h1>
-            <p class="subtitle">Ваша команда пала под натиском монстров</p>
+            <h1 id="gameover-title" class="pixel-glow danger">ВСЕ ПОГИБЛИ</h1>
+            <p id="gameover-subtitle" class="subtitle">Ваша команда пала под натиском монстров</p>
 
             <!-- Основные метрики -->
             <div class="metrics-row">

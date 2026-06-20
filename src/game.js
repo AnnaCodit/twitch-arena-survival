@@ -16,6 +16,7 @@ class Game {
         // Инициализация модулей
         this.particles = new ParticleEngine(this.width, this.height);
         this.twitch = new TwitchConnection();
+        this.gameOverReason = 'players';
 
         // Списки объектов
         this.players = [];
@@ -42,6 +43,13 @@ class Game {
         this.timeElapsed = 0; // Время игры в секундах
         this.score = 0;
         this.enemiesKilled = 0;
+        this.potionKillsSinceDrop = 0;
+        this.lastStandRevivesUsed = 0;
+        this.teamProfile = null;
+        this.waveDifficulty = null;
+        this.directorState = null;
+        this.lastDirectorUpdateFrame = 0;
+        this.chatEventState = this.createChatEventState();
 
         // Эффект тряски экрана
         this.cameraShake = 0;
@@ -109,6 +117,11 @@ class Game {
 
     // Запуск матча из Лобби
     startMatch() {
+        this.startCoreMatch();
+    }
+
+    startCoreMatch() {
+        this.gameOverReason = 'players';
         this.players = [];
         this.enemies = [];
         this.projectiles = [];
@@ -127,6 +140,13 @@ class Game {
         this.wave = 0;
         this.score = 0;
         this.enemiesKilled = 0;
+        this.potionKillsSinceDrop = 0;
+        this.lastStandRevivesUsed = 0;
+        this.teamProfile = null;
+        this.waveDifficulty = null;
+        this.directorState = null;
+        this.lastDirectorUpdateFrame = 0;
+        this.chatEventState = this.createChatEventState();
         this.timeElapsed = 0;
         this.frameCount = 0;
         this.pendingSpawnUsers.clear();
@@ -163,6 +183,14 @@ class Game {
         this.items = [];
         this.activeRelics = [];
         this.firePuddles = [];
+        this.gameOverReason = 'players';
+        this.potionKillsSinceDrop = 0;
+        this.lastStandRevivesUsed = 0;
+        this.teamProfile = null;
+        this.waveDifficulty = null;
+        this.directorState = null;
+        this.lastDirectorUpdateFrame = 0;
+        this.chatEventState = this.createChatEventState();
         this.particles.clear();
         this.clearBattleLogs();
         this.init();
@@ -180,12 +208,232 @@ class Game {
         }
     }
 
+    createChatEventState() {
+        return {
+            charge: 0,
+            cooldownFrames: 0,
+            pendingIntents: [],
+            userCooldowns: new Map(),
+            intentCounters: { heal: 0, bomb: 0, slow: 0, rally: 0 },
+            lastEffect: null,
+            triggeredCount: 0,
+            acceptedIntents: 0,
+            ignoredIntents: 0
+        };
+    }
+
+    clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    getTeamProfile() {
+        const counts = { warrior: 0, archer: 0, mage: 0, healer: 0 };
+        const activePlayers = this.players.filter(p => p.active);
+        const consideredPlayers = activePlayers.length > 0 ? activePlayers : this.players;
+        const weights = CONFIG.ADAPTIVE_DIFFICULTY.CLASS_WEIGHTS;
+
+        let frontline = 0;
+        let sustain = 0;
+        let rangedDps = 0;
+        let aoeDps = 0;
+        let squishiness = 0;
+
+        consideredPlayers.forEach(p => {
+            if (counts[p.classType] !== undefined) counts[p.classType]++;
+            const classWeights = weights[p.classType] || {};
+            frontline += classWeights.frontline || 0;
+            sustain += classWeights.sustain || 0;
+            rangedDps += classWeights.rangedDps || 0;
+            aoeDps += classWeights.aoeDps || 0;
+            squishiness += classWeights.squishiness || 0;
+        });
+
+        const totalPlayers = consideredPlayers.length;
+        const avgSquishiness = totalPlayers > 0 ? squishiness / totalPlayers : 0;
+        const dpsScore = rangedDps + aoeDps * 0.65;
+
+        return {
+            totalPlayers,
+            alivePlayers: activePlayers.length,
+            counts,
+            frontline,
+            sustain,
+            rangedDps,
+            aoeDps,
+            dpsScore,
+            avgSquishiness,
+            hasTank: counts.warrior > 0,
+            hasHealer: counts.healer > 0,
+            squishyHeavy: totalPlayers > 0 && counts.warrior === 0 && avgSquishiness >= 0.70,
+            lowDps: totalPlayers > 0 && dpsScore / totalPlayers < 0.55,
+            highSustain: counts.healer >= 2 || (counts.healer >= 1 && counts.warrior >= 1 && totalPlayers <= 3)
+        };
+    }
+
+    getWaveDifficultyProfile(teamProfile = this.getTeamProfile()) {
+        const adaptive = CONFIG.ADAPTIVE_DIFFICULTY;
+        const playerCount = Math.max(1, teamProfile.totalPlayers || 1);
+        const countScale = Math.pow(playerCount, adaptive.PLAYER_COUNT_EXPONENT);
+
+        let countMul = 1.0;
+        let hpMul = 1.0;
+        let damageMul = 1.0;
+        let spawnDelayMul = 1.0;
+        let potionDropMul = 1.0;
+        let enemyPressure = 0;
+
+        if (!teamProfile.hasTank) {
+            countMul *= 0.88;
+            hpMul *= 0.88;
+            damageMul *= 0.84;
+            spawnDelayMul *= 1.12;
+            potionDropMul *= 1.20;
+            enemyPressure -= 0.30;
+        }
+
+        if (!teamProfile.hasHealer) {
+            damageMul *= 0.88;
+            potionDropMul *= 1.18;
+            enemyPressure -= 0.15;
+        }
+
+        if (teamProfile.squishyHeavy) {
+            countMul *= 0.86;
+            hpMul *= 0.86;
+            damageMul *= this.wave <= 4 ? 0.82 : 0.90;
+            spawnDelayMul *= 1.12;
+            potionDropMul *= 1.22;
+            enemyPressure -= 0.30;
+        }
+
+        if (teamProfile.lowDps) {
+            hpMul *= 0.88;
+            countMul *= 0.95;
+            enemyPressure -= 0.10;
+        }
+
+        if (teamProfile.highSustain) {
+            countMul *= 1.08;
+            hpMul *= 1.05;
+            spawnDelayMul *= 0.92;
+            potionDropMul *= 0.92;
+            enemyPressure += 0.18;
+        }
+
+        return {
+            teamProfile,
+            playerCountScale: countScale,
+            countMul: this.clamp(countMul, adaptive.MIN_COUNT_MUL, adaptive.MAX_COUNT_MUL),
+            hpMul: this.clamp(hpMul, adaptive.MIN_HP_MUL, adaptive.MAX_HP_MUL),
+            damageMul: this.clamp(damageMul, adaptive.MIN_DAMAGE_MUL, adaptive.MAX_DAMAGE_MUL),
+            spawnDelayMul: this.clamp(spawnDelayMul, adaptive.MIN_SPAWN_DELAY_MUL, adaptive.MAX_SPAWN_DELAY_MUL),
+            potionDropMul: this.clamp(potionDropMul, adaptive.MIN_POTION_DROP_MUL, adaptive.MAX_POTION_DROP_MUL),
+            enemyPressure
+        };
+    }
+
+    refreshAdaptiveDifficulty(recalculateWaveCount = false) {
+        this.teamProfile = this.getTeamProfile();
+        this.waveDifficulty = this.getWaveDifficultyProfile(this.teamProfile);
+        this.directorState = this.getDirectorState(true);
+
+        if (recalculateWaveCount) {
+            const baseCount = CONFIG.WAVES.baseCount + (this.wave - 1) * CONFIG.WAVES.countPerWave;
+            let scaledCount = baseCount * this.waveDifficulty.playerCountScale * this.waveDifficulty.countMul;
+            if (this.wave % CONFIG.WAVES.bossInterval === 0) {
+                scaledCount *= CONFIG.ADAPTIVE_DIFFICULTY.BOSS_WAVE_COUNT_MUL;
+            }
+            this.waveEnemiesTotal = Math.max(1, Math.round(scaledCount));
+        }
+    }
+
+    getDirectorState(force = false) {
+        const adaptive = CONFIG.ADAPTIVE_DIFFICULTY;
+        if (
+            !force &&
+            this.directorState &&
+            this.frameCount - this.lastDirectorUpdateFrame < adaptive.DIRECTOR_CHECK_FRAMES
+        ) {
+            return this.directorState;
+        }
+
+        const totalPlayers = this.players.length;
+        const alivePlayers = this.players.filter(p => p.active);
+        const maxHp = alivePlayers.reduce((sum, p) => sum + p.maxHp, 0);
+        const currentHp = alivePlayers.reduce((sum, p) => sum + Math.max(0, p.hp), 0);
+        const hpRatio = maxHp > 0 ? currentHp / maxHp : 0;
+        const aliveRatio = totalPlayers > 0 ? alivePlayers.length / totalPlayers : 1;
+        const activeEnemies = this.enemies.filter(e => e.active).length;
+        const spawnProgress = this.waveEnemiesTotal > 0 ? this.waveEnemiesSpawned / this.waveEnemiesTotal : 0;
+
+        let state = {
+            pressure: 'normal',
+            spawnDelayMul: 1.0,
+            hpMul: 1.0,
+            damageMul: 1.0,
+            potionDropMul: 1.0,
+            enemyPressure: this.waveDifficulty ? this.waveDifficulty.enemyPressure : 0
+        };
+
+        if (
+            totalPlayers > 0 &&
+            (hpRatio <= adaptive.STRUGGLE_HP_RATIO || aliveRatio <= 0.50)
+        ) {
+            state = {
+                pressure: 'struggle',
+                spawnDelayMul: 1.25,
+                hpMul: 0.90,
+                damageMul: 0.88,
+                potionDropMul: 1.35,
+                enemyPressure: -0.55
+            };
+        } else if (
+            totalPlayers > 0 &&
+            hpRatio >= adaptive.STEAMROLL_HP_RATIO &&
+            aliveRatio >= 0.95 &&
+            spawnProgress >= 0.35 &&
+            activeEnemies <= Math.max(3, totalPlayers * 2)
+        ) {
+            state = {
+                pressure: 'steamroll',
+                spawnDelayMul: 0.88,
+                hpMul: 1.05,
+                damageMul: 1.04,
+                potionDropMul: 0.92,
+                enemyPressure: 0.35
+            };
+        }
+
+        this.directorState = state;
+        this.lastDirectorUpdateFrame = this.frameCount;
+        return state;
+    }
+
+    getCurrentSpawnDelay() {
+        const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
+        const director = this.getDirectorState();
+        const delay = CONFIG.WAVES.spawnDelay * waveDifficulty.spawnDelayMul * director.spawnDelayMul;
+        return Math.max(24, Math.round(delay));
+    }
+
+    getCurrentPotionDropMul() {
+        const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
+        const director = this.getDirectorState();
+        return this.clamp(
+            waveDifficulty.potionDropMul * director.potionDropMul,
+            CONFIG.ADAPTIVE_DIFFICULTY.MIN_POTION_DROP_MUL,
+            CONFIG.ADAPTIVE_DIFFICULTY.MAX_POTION_DROP_MUL
+        );
+    }
+
     // Подготовка и запуск следующей волны
     startNextWave() {
         this.clearBattleLogs();
         this.wave++;
         this.waveEnemiesSpawned = 0;
+        this.waveSpawnTimer = 0;
         this.waveInProgress = true;
+        this.lastStandRevivesUsed = 0;
 
         // Возрождаем ВСЕХ погибших игроков, лечим живых и расставляем всех случайным образом по карте
         this.players.forEach(p => {
@@ -219,11 +467,7 @@ class Game {
         });
         this.pendingSpawnUsers.clear();
 
-        // Рассчитываем количество врагов в этой волне
-        this.waveEnemiesTotal = CONFIG.WAVES.baseCount + (this.wave - 1) * CONFIG.WAVES.countPerWave;
-        // Коэффициент увеличения монстров от размера лобби живых (пропорционально)
-        const activePlayers = this.players.filter(p => p.active).length;
-        this.waveEnemiesTotal = Math.round(this.waveEnemiesTotal * activePlayers);
+        this.refreshAdaptiveDifficulty(true);
 
         // Выводим сообщение о старте волны
         this.particles.spawnFloatingText(
@@ -332,7 +576,7 @@ class Game {
     }
 
     // Игровой тик: физика, ИИ, спавн
-    update() {
+    update(dt) {
         this.frameCount++;
 
         // Обновление тряски экрана
@@ -343,26 +587,32 @@ class Game {
 
         if (this.gameState === 'playing') {
             this.timeElapsed += 1 / 60;
+            this.updateChatEvents();
 
             // Спавним игроков, присоединившихся во время боя (прямо в бой!)
             if (this.pendingSpawnUsers.size > 0) {
+                let spawnedNewPlayers = false;
                 this.pendingSpawnUsers.forEach((classType, username) => {
                     if (!this.players.some(p => p.username === username)) {
                         const spawnX = 60 + Math.random() * (this.width - 150);
                         const spawnY = 90 + Math.random() * (this.height - 180);
                         this.players.push(new Player(spawnX, spawnY, username, classType, this.relicModifiers));
+                        spawnedNewPlayers = true;
                         
                         this.particles.spawnSpark(spawnX, spawnY, "#3498db", 15);
                         this.particles.spawnFloatingText(spawnX, spawnY - 20, `${username} вошел в бой!`, "#3498db", true);
                     }
                 });
                 this.pendingSpawnUsers.clear();
+                if (spawnedNewPlayers) {
+                    this.refreshAdaptiveDifficulty(false);
+                }
             }
 
             // 1. Постепенный спавн врагов в раунде
             if (this.waveInProgress && this.waveEnemiesSpawned < this.waveEnemiesTotal) {
                 this.waveSpawnTimer++;
-                if (this.waveSpawnTimer >= CONFIG.WAVES.spawnDelay) {
+                if (this.waveSpawnTimer >= this.getCurrentSpawnDelay()) {
                     this.waveSpawnTimer = 0;
                     this.spawnEnemy();
                 }
@@ -374,10 +624,12 @@ class Game {
             // 3. Обновление игроков
             const alivePlayers = this.players.filter(p => p.active);
             
-            // Если все игроки погибли — GAME OVER
             if (this.players.length > 0 && alivePlayers.length === 0) {
-                this.gameState = 'gameover';
-                return;
+                if (!this.triggerLastStand()) {
+                    this.gameOverReason = 'players';
+                    this.gameState = 'gameover';
+                    return;
+                }
             }
 
             this.players.forEach(p => {
@@ -386,10 +638,16 @@ class Game {
 
             // 4. Обновление врагов
             this.enemies.forEach(e => {
-                e.update(this.players, this.frameCount, this.particles, (amt) => this.shake(amt), this.projectiles);
+                this.updateChatEnemyEffects(e);
+                e.update(alivePlayers, this.frameCount, this.particles, (amt) => this.shake(amt), this.projectiles);
                 
                 // Проверяем шипы (возврат урона)
-                if (e.active && this.relicModifiers.mechanics.thorns > 0 && e.lastAttackFrame === this.frameCount) {
+                if (
+                    e.active &&
+                    this.relicModifiers.mechanics.thorns > 0 &&
+                    e.lastAttackFrame === this.frameCount &&
+                    e.lastAttackedTarget instanceof Player
+                ) {
                     // Враг только что ударил игрока, вернем ему часть урона
                     const thornsDmg = e.damage * this.relicModifiers.mechanics.thorns;
                     e.takeDamage(thornsDmg, "Шипы", this.particles);
@@ -403,6 +661,7 @@ class Game {
                 if (!e.active) {
                     this.enemiesKilled++;
                     this.score += e.scoreValue;
+                    this.tryDropPotion(e);
                     this.enemies.splice(i, 1);
                 }
             }
@@ -481,6 +740,379 @@ class Game {
         this.particles.update();
     }
 
+    tryDropPotion(enemy) {
+        if (!enemy || enemy.isBoss) return;
+
+        const potionDropMul = this.getCurrentPotionDropMul();
+        const pityLimit = Math.max(3, Math.round(CONFIG.HEAL_POTION_PITY_KILLS / potionDropMul));
+        const dropChance = this.clamp(CONFIG.HEAL_POTION_DROP_CHANCE * potionDropMul, 0, 0.75);
+        const pityReady = this.potionKillsSinceDrop >= pityLimit;
+        const shouldDrop = pityReady || Math.random() <= dropChance;
+
+        if (!shouldDrop) {
+            this.potionKillsSinceDrop++;
+            return;
+        }
+
+        this.potionKillsSinceDrop = 0;
+
+        const x = enemy.x + enemy.width / 2 - 7;
+        const y = enemy.y + enemy.height / 2 - 7;
+        this.items.push(new HealthPotion(x, y));
+    }
+
+    triggerLastStand() {
+        if (this.lastStandRevivesUsed >= CONFIG.LAST_STAND_REVIVES_PER_WAVE) {
+            return false;
+        }
+
+        this.lastStandRevivesUsed++;
+        this.projectiles = this.projectiles.filter(pr => !pr.isEnemy);
+        this.cameraShake = Math.max(this.cameraShake, 12);
+
+        this.players.forEach((p, index) => {
+            p.active = true;
+            p.hp = Math.max(1, Math.round(p.maxHp * CONFIG.LAST_STAND_HP_RATIO));
+            p.damageReductionFrames = CONFIG.LAST_STAND_PROTECTION_FRAMES;
+            p.damageTakenMul = CONFIG.LAST_STAND_DAMAGE_TAKEN_MUL;
+            p.kbX = 0;
+            p.kbY = 0;
+            p.vx = 0;
+            p.vy = 0;
+
+            const angle = (Math.PI * 2 * index) / Math.max(1, this.players.length);
+            p.x = this.width / 2 + Math.cos(angle) * 90;
+            p.y = this.height / 2 + Math.sin(angle) * 70;
+
+            this.particles.spawnSpark(p.x + p.width / 2, p.y + p.height / 2, "#f1c40f", 18);
+            this.particles.spawnFloatingText(
+                p.x + p.width / 2,
+                p.y - 10,
+                `+${p.hp} HP`,
+                "#2ecc71",
+                true
+            );
+        });
+
+        this.particles.spawnFloatingText(
+            this.width / 2,
+            this.height / 2 - 95,
+            "ПОСЛЕДНИЙ ШАНС!",
+            "#f1c40f",
+            true,
+            true
+        );
+        this.addBattleLog('resurrect', 'ПОСЛЕДНИЙ ШАНС! Команда возвращается в бой.');
+
+        return true;
+    }
+
+    getChatEventType(command) {
+        const aliases = {
+            '!heal': 'heal',
+            '!хил': 'heal',
+            '!healme': 'heal',
+            '!bomb': 'bomb',
+            '!бомба': 'bomb',
+            '!slow': 'slow',
+            '!замедлить': 'slow',
+            '!rally': 'rally',
+            '!рывок': 'rally'
+        };
+        return aliases[command] || null;
+    }
+
+    handleChatEventCommand(username, eventType) {
+        const config = CONFIG.CHAT_EVENTS;
+        const state = this.chatEventState;
+
+        if (this.gameState !== 'playing') {
+            state.ignoredIntents++;
+            return false;
+        }
+
+        if (state.pendingIntents.length >= config.MAX_PENDING_INTENTS) {
+            state.ignoredIntents++;
+            return false;
+        }
+
+        const nextAllowedFrame = state.userCooldowns.get(username) || -Infinity;
+        if (this.frameCount < nextAllowedFrame) {
+            state.ignoredIntents++;
+            return false;
+        }
+
+        state.userCooldowns.set(username, this.frameCount + config.USER_COOLDOWN_FRAMES);
+        state.pendingIntents.push({ username, eventType });
+        state.acceptedIntents++;
+        return true;
+    }
+
+    updateChatEvents() {
+        const config = CONFIG.CHAT_EVENTS;
+        const state = this.chatEventState;
+
+        if (state.cooldownFrames > 0) {
+            state.cooldownFrames--;
+        }
+
+        if (this.frameCount % CONFIG.FPS === 0) {
+            state.userCooldowns.forEach((nextAllowedFrame, username) => {
+                if (nextAllowedFrame <= this.frameCount) {
+                    state.userCooldowns.delete(username);
+                }
+            });
+        }
+
+        let processed = 0;
+        while (state.pendingIntents.length > 0 && processed < config.MAX_PROCESSED_PER_TICK) {
+            const intent = state.pendingIntents.shift();
+            state.charge = Math.min(config.CHARGE_MAX, state.charge + config.CHARGE_PER_MESSAGE);
+            state.intentCounters[intent.eventType] = (state.intentCounters[intent.eventType] || 0) + 1;
+            processed++;
+        }
+
+        if (state.charge >= config.CHARGE_MAX && state.cooldownFrames <= 0) {
+            this.applyChatEvent(this.getDominantChatEvent());
+        }
+    }
+
+    getDominantChatEvent() {
+        const counters = this.chatEventState.intentCounters;
+        let maxVotes = 0;
+        let leaders = [];
+
+        Object.entries(counters).forEach(([eventType, votes]) => {
+            if (votes > maxVotes) {
+                maxVotes = votes;
+                leaders = [eventType];
+            } else if (votes === maxVotes && votes > 0) {
+                leaders.push(eventType);
+            }
+        });
+
+        if (leaders.length === 0) return 'heal';
+        return leaders[Math.floor(Math.random() * leaders.length)];
+    }
+
+    resetChatEventMeter(effectType) {
+        const state = this.chatEventState;
+        state.charge = 0;
+        state.cooldownFrames = CONFIG.CHAT_EVENTS.EFFECT_COOLDOWN_FRAMES;
+        state.pendingIntents = [];
+        state.intentCounters = { heal: 0, bomb: 0, slow: 0, rally: 0 };
+        state.lastEffect = effectType;
+        state.triggeredCount++;
+    }
+
+    applyChatEvent(effectType) {
+        if (effectType === 'heal') {
+            this.applyChatHeal();
+        } else if (effectType === 'bomb') {
+            this.applyChatBomb();
+        } else if (effectType === 'slow') {
+            this.applyChatSlow();
+        } else if (effectType === 'rally') {
+            this.applyChatRally();
+        }
+
+        this.resetChatEventMeter(effectType);
+    }
+
+    applyChatHeal() {
+        const effect = CONFIG.CHAT_EVENTS.EFFECTS.heal;
+        let healedPlayers = 0;
+
+        this.players.forEach(p => {
+            if (p.active) {
+                const amount = Math.max(effect.minHeal, Math.round(p.maxHp * effect.healRatio));
+                if (p.heal(amount, this.particles) > 0) {
+                    healedPlayers++;
+                }
+            }
+        });
+
+        this.particles.spawnFloatingText(this.width / 2, this.height / 2 - 80, 'ЧАТ: ЛЕЧЕНИЕ!', '#2ecc71', true, true);
+        this.addBattleLog('chat', `ЧАТ: лечение поддержало ${healedPlayers} игроков.`);
+    }
+
+    applyChatBomb() {
+        const effect = CONFIG.CHAT_EVENTS.EFFECTS.bomb;
+        const activePlayers = this.players.filter(p => p.active);
+        const center = activePlayers.length > 0
+            ? activePlayers.reduce((acc, p) => {
+                acc.x += p.x + p.width / 2;
+                acc.y += p.y + p.height / 2;
+                return acc;
+            }, { x: 0, y: 0 })
+            : { x: this.width / 2, y: this.height / 2 };
+
+        if (activePlayers.length > 0) {
+            center.x /= activePlayers.length;
+            center.y /= activePlayers.length;
+        }
+
+        const targets = this.enemies
+            .filter(e => e.active)
+            .sort((a, b) => {
+                const adx = a.x + a.width / 2 - center.x;
+                const ady = a.y + a.height / 2 - center.y;
+                const bdx = b.x + b.width / 2 - center.x;
+                const bdy = b.y + b.height / 2 - center.y;
+                return (adx * adx + ady * ady) - (bdx * bdx + bdy * bdy);
+            })
+            .slice(0, effect.maxTargets);
+
+        targets.forEach(e => {
+            const damage = e.isBoss ? effect.damage * effect.bossDamageMul : effect.damage;
+            e.takeDamage(damage, 'Чат', this.particles);
+            this.particles.spawnSpark(e.x + e.width / 2, e.y + e.height / 2, '#f1c40f', 8);
+        });
+
+        this.cameraShake = Math.max(this.cameraShake, 8);
+        this.particles.spawnFloatingText(center.x, center.y - 40, 'ЧАТ: БОМБА!', '#f1c40f', true, true);
+        this.addBattleLog('chat', `ЧАТ: бомба ударила по ${targets.length} врагам.`);
+    }
+
+    applyChatSlow() {
+        const effect = CONFIG.CHAT_EVENTS.EFFECTS.slow;
+        const targets = this.enemies.filter(e => e.active).slice(0, effect.maxTargets);
+
+        targets.forEach(e => {
+            if (!e.chatOriginalSpeed) {
+                e.chatOriginalSpeed = e.speed;
+            }
+            e.speed = Math.min(e.speed, e.chatOriginalSpeed * effect.speedMul);
+            e.chatSlowFrames = Math.max(e.chatSlowFrames || 0, effect.durationFrames);
+        });
+
+        this.particles.spawnFloatingText(this.width / 2, this.height / 2 - 80, 'ЧАТ: ЗАМЕДЛЕНИЕ!', '#3498db', true, true);
+        this.addBattleLog('chat', `ЧАТ: замедление задело ${targets.length} врагов.`);
+    }
+
+    applyChatRally() {
+        const effect = CONFIG.CHAT_EVENTS.EFFECTS.rally;
+        let buffedPlayers = 0;
+
+        this.players.forEach(p => {
+            if (p.active) {
+                p.chatRallyFrames = Math.max(p.chatRallyFrames || 0, effect.durationFrames);
+                p.chatRallyDamageMul = effect.damageMul;
+                p.chatRallyDefenseFrames = Math.max(p.chatRallyDefenseFrames || 0, effect.durationFrames);
+                p.chatRallyDamageTakenMul = effect.damageTakenMul;
+                this.particles.spawnSpark(p.x + p.width / 2, p.y + p.height / 2, '#00f0ff', 5);
+                buffedPlayers++;
+            }
+        });
+
+        this.particles.spawnFloatingText(this.width / 2, this.height / 2 - 80, 'ЧАТ: РЫВОК!', '#00f0ff', true, true);
+        this.addBattleLog('chat', `ЧАТ: рывок усилил ${buffedPlayers} игроков.`);
+    }
+
+    updateChatEnemyEffects(enemy) {
+        if (!enemy.chatSlowFrames) return;
+
+        enemy.chatSlowFrames--;
+        if (enemy.chatSlowFrames <= 0) {
+            if (enemy.chatOriginalSpeed) {
+                enemy.speed = enemy.chatOriginalSpeed;
+            }
+            enemy.chatOriginalSpeed = null;
+            enemy.chatSlowFrames = 0;
+        }
+    }
+
+    getChatHudState() {
+        const state = this.chatEventState;
+        const effects = CONFIG.CHAT_EVENTS.EFFECTS;
+        const dominant = this.getDominantChatEvent();
+        const cooldownSeconds = Math.ceil(state.cooldownFrames / CONFIG.FPS);
+        const percent = Math.round((state.charge / CONFIG.CHAT_EVENTS.CHARGE_MAX) * 100);
+
+        return {
+            label: state.cooldownFrames > 0
+                ? `CHAT: ${cooldownSeconds}s`
+                : `CHAT: ${percent}%`,
+            effectLabel: effects[dominant].label,
+            percent,
+            cooldownSeconds,
+            isCoolingDown: state.cooldownFrames > 0
+        };
+    }
+
+    chooseEnemyType(director) {
+        const pressure = director.enemyPressure;
+        const rnd = Math.random();
+
+        if (this.wave < 3) {
+            return 'slime';
+        }
+
+        if (this.wave < 6) {
+            if (pressure < -0.25) {
+                if (rnd < 0.55) return 'slime';
+                if (rnd < 0.86) return 'goblin';
+                if (rnd < 0.98) return 'goblin_stone';
+                return 'bull';
+            }
+            if (pressure > 0.25) {
+                if (rnd < 0.28) return 'slime';
+                if (rnd < 0.58) return 'goblin';
+                if (rnd < 0.82) return 'goblin_stone';
+                return 'bull';
+            }
+            if (rnd < 0.40) return 'slime';
+            if (rnd < 0.70) return 'goblin';
+            if (rnd < 0.90) return 'goblin_stone';
+            return 'bull';
+        }
+
+        if (this.wave < 10) {
+            if (pressure < -0.25) {
+                if (rnd < 0.32) return 'slime';
+                if (rnd < 0.62) return 'goblin';
+                if (rnd < 0.80) return 'goblin_stone';
+                if (rnd < 0.95) return 'skeleton';
+                return 'bull';
+            }
+            if (pressure > 0.25) {
+                if (rnd < 0.12) return 'slime';
+                if (rnd < 0.33) return 'goblin';
+                if (rnd < 0.56) return 'goblin_stone';
+                if (rnd < 0.80) return 'skeleton';
+                return 'bull';
+            }
+            if (rnd < 0.20) return 'slime';
+            if (rnd < 0.45) return 'goblin';
+            if (rnd < 0.65) return 'goblin_stone';
+            if (rnd < 0.85) return 'skeleton';
+            return 'bull';
+        }
+
+        if (pressure < -0.25) {
+            if (rnd < 0.16) return 'slime';
+            if (rnd < 0.36) return 'goblin';
+            if (rnd < 0.56) return 'goblin_stone';
+            if (rnd < 0.76) return 'skeleton';
+            if (rnd < 0.94) return 'bull';
+            return 'orc';
+        }
+        if (pressure > 0.25) {
+            if (rnd < 0.06) return 'slime';
+            if (rnd < 0.18) return 'goblin';
+            if (rnd < 0.32) return 'goblin_stone';
+            if (rnd < 0.54) return 'skeleton';
+            if (rnd < 0.76) return 'bull';
+            return 'orc';
+        }
+        if (rnd < 0.10) return 'slime';
+        if (rnd < 0.25) return 'goblin';
+        if (rnd < 0.40) return 'goblin_stone';
+        if (rnd < 0.60) return 'skeleton';
+        if (rnd < 0.80) return 'bull';
+        return 'orc';
+    }
+
     // Спавн одного врага
     spawnEnemy() {
         this.waveEnemiesSpawned++;
@@ -512,12 +1144,22 @@ class Game {
 
         // Каждую 10-ю волну спавним ТОЛЬКО Босса (или Босса и свиту)
         const isBossWave = (this.wave % CONFIG.WAVES.bossInterval === 0);
-        
-        let type = 'slime';
+        const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
+        const director = this.getDirectorState();
+        const enemyDifficulty = {
+            hpMul: waveDifficulty.hpMul * director.hpMul,
+            damageMul: waveDifficulty.damageMul * director.damageMul
+        };
 
         if (isBossWave && this.waveEnemiesSpawned === 1) {
             // Спавним рейд-босса
-            const boss = new Boss(this.width/2 - 32, -64, this.wave, this.players.filter(p => p.active).length);
+            const boss = new Boss(
+                this.width/2 - 32,
+                -64,
+                this.wave,
+                this.players.filter(p => p.active).length,
+                enemyDifficulty
+            );
             // Применяем модификаторы скорости врагов от реликвий
             if (this.relicModifiers.enemies && this.relicModifiers.enemies.speed) {
                 boss.speed *= this.relicModifiers.enemies.speed;
@@ -527,33 +1169,8 @@ class Game {
         }
 
         // Для обычных волн/свиты выбираем монстра по формуле от сложности
-        const rnd = Math.random();
-        
-        if (this.wave < 3) {
-            type = 'slime'; // Начальные волны: только слизни
-        } else if (this.wave < 6) {
-            if (rnd < 0.40) type = 'slime';
-            else if (rnd < 0.70) type = 'goblin';
-            else if (rnd < 0.90) type = 'goblin_stone';
-            else type = 'bull';
-        } else if (this.wave < 10) {
-            if (rnd < 0.20) type = 'slime';
-            else if (rnd < 0.45) type = 'goblin';
-            else if (rnd < 0.65) type = 'goblin_stone';
-            else if (rnd < 0.85) type = 'skeleton';
-            else type = 'bull';
-        } else {
-            // После 10 волны доступны все
-            if (rnd < 0.10) type = 'slime';
-            else if (rnd < 0.25) type = 'goblin';
-            else if (rnd < 0.40) type = 'goblin_stone';
-            else if (rnd < 0.60) type = 'skeleton';
-            else if (rnd < 0.80) type = 'bull';
-            else type = 'orc';
-        }
-
-        const activePlayersCount = this.players.filter(p => p.active).length;
-        const enemy = new Enemy(x, y, type, this.wave, activePlayersCount);
+        const type = this.chooseEnemyType(director);
+        const enemy = new Enemy(x, y, type, this.wave, waveDifficulty.playerCountScale, enemyDifficulty);
         
         // Применяем реликвии-дебаффы к монстрам
         if (this.relicModifiers.enemies) {
@@ -617,17 +1234,25 @@ class Game {
             this.ctx.translate(dx, dy);
         }
 
-        // 2. Рисуем фон (зеленая трава)
-        this.ctx.fillStyle = "#3b7a57"; // Глубокий лесной зеленый
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        const isObsTransparent = typeof document !== 'undefined' &&
+            document.body &&
+            document.body.classList.contains('obs-mode');
 
-        // Рисуем текстуру земли (травинки)
-        this.ctx.fillStyle = "#2d5e41";
-        for (let x = 40; x < this.width; x += 160) {
-            for (let y = 30; y < this.height; y += 120) {
-                // Маленькие травинки
-                this.ctx.fillRect(x + (y % 17), y + (x % 13), 2, 6);
-                this.ctx.fillRect(x + (y % 17) - 3, y + (x % 13) + 2, 2, 4);
+        this.ctx.clearRect(0, 0, this.width, this.height);
+
+        if (!isObsTransparent) {
+            // 2. Рисуем фон (зеленая трава)
+            this.ctx.fillStyle = "#3b7a57"; // Глубокий лесной зеленый
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            // Рисуем текстуру земли (травинки)
+            this.ctx.fillStyle = "#2d5e41";
+            for (let x = 40; x < this.width; x += 160) {
+                for (let y = 30; y < this.height; y += 120) {
+                    // Маленькие травинки
+                    this.ctx.fillRect(x + (y % 17), y + (x % 13), 2, 6);
+                    this.ctx.fillRect(x + (y % 17) - 3, y + (x % 13) + 2, 2, 4);
+                }
             }
         }
 
@@ -888,10 +1513,52 @@ class Game {
         this.ctx.fillText(line, x, currentY);
     }
 
-    // Обработка входящих команд
+    getHudState() {
+        const isVoting = this.gameState === 'voting';
+        const remainingEnemies = Math.max(0, (this.waveEnemiesTotal - this.waveEnemiesSpawned) + this.enemies.length);
+        const aliveCount = this.players.filter(p => p.active).length;
+        const timeRemaining = Math.max(0, Math.ceil(((this.votingEndTime || Date.now()) - Date.now()) / 1000));
+        const chatHud = this.getChatHudState();
+
+        return {
+            waveLabel: `ВОЛНА: ${this.wave}`,
+            progressLabel: isVoting ? `ВЫБОР: ${timeRemaining} сек` : `ВРАГОВ: ${remainingEnemies}`,
+            progressAccent: isVoting ? 'voting' : 'combat',
+            aliveLabel: `В ЖИВЫХ: ${aliveCount} / ${this.players.length}`,
+            scoreLabel: `СЧЕТ: ${this.score}`,
+            chatLabel: chatHud.label,
+            chatEffectLabel: chatHud.effectLabel,
+            chatPowerPercent: chatHud.percent,
+            chatCoolingDown: chatHud.isCoolingDown
+        };
+    }
+
+    getResultState() {
+        const min = Math.floor(this.timeElapsed / 60);
+        const sec = Math.floor(this.timeElapsed % 60);
+        const healers = this.players.filter(p => p.classType === 'healer');
+
+        return {
+            title: 'ВСЕ ПОГИБЛИ',
+            subtitle: 'Ваша команда пала под натиском монстров',
+            wave: this.wave,
+            time: `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`,
+            score: this.score,
+            healerHealing: Math.round(healers.reduce((sum, h) => sum + (h.healingDone || 0), 0)),
+            healerResurrects: healers.reduce((sum, h) => sum + (h.resurrectCount || 0), 0),
+            players: [...this.players].sort((a, b) => b.kills - a.kills)
+        };
+    }
+
     handleCommand(username, command, args, color) {
         // Очищаем имя от спецсимволов IRC
         const cleanUser = username.replace(/[^a-zA-Z0-9_А-Яа-я]/g, '');
+        const chatEventType = this.getChatEventType(command);
+
+        if (chatEventType) {
+            this.handleChatEventCommand(cleanUser, chatEventType);
+            return;
+        }
 
         if (command === '!join' || command === '!войти' || command === '!играть') {
             // Разрешенные классы

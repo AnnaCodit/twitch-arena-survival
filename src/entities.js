@@ -208,6 +208,12 @@ class Player extends Entity {
         // Характеристики огненных луж мага
         this.puddleRadiusMul = 1.0;
         this.puddleDurationAdd = 0;
+        this.damageReductionFrames = 0;
+        this.damageTakenMul = 1.0;
+        this.chatRallyFrames = 0;
+        this.chatRallyDamageMul = 1.0;
+        this.chatRallyDefenseFrames = 0;
+        this.chatRallyDamageTakenMul = 1.0;
 
         // Перезарядка воскрешения целителя (20 секунд = 1200 кадров)
         this.lastResurrectFrame = -1200;
@@ -273,6 +279,13 @@ class Player extends Entity {
     }
 
     takeDamage(amount, attackerName, particleEngine) {
+        let incomingAmount = amount;
+        if (this.damageReductionFrames > 0) {
+            incomingAmount *= this.damageTakenMul;
+        } else if (this.chatRallyDefenseFrames > 0) {
+            incomingAmount *= this.chatRallyDamageTakenMul;
+        }
+
         if (this.classType === 'warrior') {
             // Способность блокирования урона в 20% случаев
             if (Math.random() < 0.20) {
@@ -288,7 +301,7 @@ class Player extends Entity {
                 return 0; // Заблокировали весь урон!
             }
         }
-        return super.takeDamage(amount, attackerName, particleEngine);
+        return super.takeDamage(incomingAmount, attackerName, particleEngine);
     }
 
     // Получение опыта за убийства
@@ -337,6 +350,25 @@ class Player extends Entity {
             return;
         }
 
+        if (this.damageReductionFrames > 0) {
+            this.damageReductionFrames--;
+            if (this.damageReductionFrames <= 0) {
+                this.damageTakenMul = 1.0;
+            }
+        }
+        if (this.chatRallyFrames > 0) {
+            this.chatRallyFrames--;
+            if (this.chatRallyFrames <= 0) {
+                this.chatRallyDamageMul = 1.0;
+            }
+        }
+        if (this.chatRallyDefenseFrames > 0) {
+            this.chatRallyDefenseFrames--;
+            if (this.chatRallyDefenseFrames <= 0) {
+                this.chatRallyDamageTakenMul = 1.0;
+            }
+        }
+
         if (this.currentTarget && !this.currentTarget.active) {
             this.currentTarget = null;
         }
@@ -365,7 +397,8 @@ class Player extends Entity {
             if (this.classType === 'healer' && fleeDist < 45) {
                 shouldFleeFromEnemy = true;
             }
-            if (this.classType === 'warrior' && (this.hp / this.maxHp < 0.20)) {
+            const activeAllies = players.filter(p => p.active).length;
+            if (this.classType === 'warrior' && activeAllies > 1 && (this.hp / this.maxHp < 0.20)) {
                 shouldFleeFromEnemy = true;
             }
         }
@@ -657,6 +690,9 @@ class Player extends Entity {
             const lostHpPercent = (this.maxHp - this.hp) / this.maxHp;
             finalDamage = Math.round(finalDamage * (1 + lostHpPercent)); // До +100% урона при смерти
         }
+        if (this.chatRallyFrames > 0) {
+            finalDamage = Math.round(finalDamage * (this.chatRallyDamageMul || 1.0));
+        }
 
         if (this.classType === 'warrior') {
             // Воин машет мечом (АОЕ ближнего боя по конусу/полукругу перед собой)
@@ -675,8 +711,8 @@ class Player extends Entity {
                     const dyFromWarrior = (e.y + e.height / 2) - (this.y + this.height / 2);
                     const distFromWarrior = Math.sqrt(dxFromWarrior * dxFromWarrior + dyFromWarrior * dyFromWarrior);
 
-                    // Урон по площади (радиус 60 пикселей перед собой). Попадаем, если враг в секторе атаки ИЛИ находится вплотную (distFromWarrior < 35)
-                    if (edist <= 60 && (distFromWarrior < 35 || (this.direction === 1 ? edx >= -10 : edx <= 10))) {
+                    // Урон по площади (радиус 60 пикселей перед собой). Попадаем, если враг в секторе атаки ИЛИ находится вплотную.
+                    if (edist <= 60 && (distFromWarrior < 50 || (this.direction === 1 ? edx >= -10 : edx <= 10))) {
                         const actualDmg = e.takeDamage(finalDamage * (0.8 + Math.random() * 0.4), this.username, particleEngine);
                         this.damageDealt += actualDmg;
 
@@ -793,15 +829,19 @@ class Player extends Entity {
 
 // Класс Врага (монстры)
 class Enemy extends Entity {
-    constructor(x, y, enemyType, waveNumber, lobbySize = 1) {
+    constructor(x, y, enemyType, waveNumber, lobbySize = 1, difficulty = {}) {
         const baseStats = JSON.parse(JSON.stringify(CONFIG.ENEMIES[enemyType]));
 
         // Масштабируем статы монстров от номера волны
-        const waveMultiplier = 1.0 + (waveNumber - 1) * 0.15; // +15% ХП/урона за волну (сложность увеличена)
+        const hpWaveMultiplier = 1.0 + (waveNumber - 1) * CONFIG.ENEMY_WAVE_HP_SCALE;
+        const damageWaveMultiplier = 1.0 + (waveNumber - 1) * CONFIG.ENEMY_WAVE_DAMAGE_SCALE;
         // Увеличиваем сложность пропорционально количеству игроков в лобби (только здоровье)
         const playerMultiplier = lobbySize;
-        baseStats.maxHp = Math.round(baseStats.maxHp * waveMultiplier * playerMultiplier);
-        baseStats.damage = Math.round(baseStats.damage * waveMultiplier);
+        const earlyDamageMul = waveNumber <= 3 ? CONFIG.EARLY_WAVE_DAMAGE_MUL : 1.0;
+        const hpMul = difficulty.hpMul || 1.0;
+        const damageMul = difficulty.damageMul || 1.0;
+        baseStats.maxHp = Math.round(baseStats.maxHp * hpWaveMultiplier * playerMultiplier * hpMul);
+        baseStats.damage = Math.round(baseStats.damage * damageWaveMultiplier * earlyDamageMul * damageMul);
 
         super(x, y, 22 * (baseStats.scale || 1), 22 * (baseStats.scale || 1), baseStats);
 
@@ -809,6 +849,7 @@ class Enemy extends Entity {
         this.xpValue = baseStats.xpValue;
         this.scoreValue = baseStats.scoreValue;
         this.isBoss = baseStats.isBoss || false;
+        this.lastAttackedTarget = null;
     }
 
     // Поиск ближайшего живого игрока
@@ -859,6 +900,7 @@ class Enemy extends Entity {
                             // Конец заряда
                             this.isCharging = false;
                             this.lastAttackFrame = frameCount;
+                            this.lastAttackedTarget = null;
                             this.vx = 0;
                             this.vy = 0;
                         }
@@ -869,6 +911,7 @@ class Enemy extends Entity {
                 if (this.chargeTimer <= 0) {
                     this.isCharging = false;
                     this.lastAttackFrame = frameCount;
+                    this.lastAttackedTarget = null;
                 }
 
                 // Двигаемся и выходим из обычного ИИ
@@ -935,6 +978,7 @@ class Enemy extends Entity {
 
                 if (frameCount - this.lastAttackFrame >= this.cooldown) {
                     this.lastAttackFrame = frameCount;
+                    this.lastAttackedTarget = null;
                     this.pose = 'attack';
                     this.animTimer = 0;
 
@@ -953,9 +997,10 @@ class Enemy extends Entity {
                     } else {
                         // Наносим урон в ближнем бою
                         const actualDmg = target.takeDamage(this.damage * (0.8 + Math.random() * 0.4), this.name, particleEngine);
+                        this.lastAttackedTarget = target;
 
                         // Эффект шипов (легендарная реликвия игроков)
-                        if (actualDmg > 0 && target.active && target.auras.legendary) {
+                        if (actualDmg > 0 && target.active && target.auras && target.auras.legendary) {
                             // Ищем модификатор шипов
                             // Передадим проверку реликвий через игровой цикл, либо прочитаем из флагов ауры
                             // Мы реализуем возврат урона напрямую в game.js для чистоты, либо прямо здесь, если знаем про реликвию
@@ -989,12 +1034,12 @@ class Enemy extends Entity {
 
 // Класс Рейд-Босса (наследник врага)
 class Boss extends Enemy {
-    constructor(x, y, waveNumber, alivePlayerCount) {
-        super(x, y, 'boss', waveNumber, alivePlayerCount);
+    constructor(x, y, waveNumber, alivePlayerCount, difficulty = {}) {
+        super(x, y, 'boss', waveNumber, 1, difficulty);
 
-        // Масштабируем здоровье босса от количества игроков, чтобы рейд имел смысл!
-        const playerScale = 1.0 + (alivePlayerCount - 1) * 0.45; // +45% здоровья босса за каждого игрока
-        this.maxHp = Math.round(this.maxHp * playerScale);
+        const adaptive = CONFIG.ADAPTIVE_DIFFICULTY || {};
+        const playerScale = 1.0 + Math.max(0, alivePlayerCount - 1) * (adaptive.BOSS_PLAYER_HP_SCALE || 0.18);
+        this.maxHp = Math.round(this.maxHp * playerScale * (adaptive.BOSS_HP_MUL || 1.0));
         this.hp = this.maxHp;
 
         this.lastStompFrame = 0;
