@@ -50,6 +50,7 @@ class Game {
         this.directorState = null;
         this.lastDirectorUpdateFrame = 0;
         this.chatEventState = this.createChatEventState();
+        this.debugBalanceOverrides = this.createDebugBalanceOverrides();
 
         // Эффект тряски экрана
         this.cameraShake = 0;
@@ -147,6 +148,7 @@ class Game {
         this.directorState = null;
         this.lastDirectorUpdateFrame = 0;
         this.chatEventState = this.createChatEventState();
+        this.debugBalanceOverrides = this.createDebugBalanceOverrides();
         this.timeElapsed = 0;
         this.frameCount = 0;
         this.pendingSpawnUsers.clear();
@@ -191,6 +193,7 @@ class Game {
         this.directorState = null;
         this.lastDirectorUpdateFrame = 0;
         this.chatEventState = this.createChatEventState();
+        this.debugBalanceOverrides = this.createDebugBalanceOverrides();
         this.particles.clear();
         this.clearBattleLogs();
         this.init();
@@ -214,11 +217,20 @@ class Game {
             cooldownFrames: 0,
             pendingIntents: [],
             userCooldowns: new Map(),
-            intentCounters: { heal: 0, bomb: 0, slow: 0, rally: 0 },
+            intentCounters: { heal: 0, bomb: 0 },
             lastEffect: null,
             triggeredCount: 0,
             acceptedIntents: 0,
             ignoredIntents: 0
+        };
+    }
+
+    createDebugBalanceOverrides() {
+        return {
+            enemyHpMul: 1.0,
+            enemyDamageMul: 1.0,
+            spawnDelayMul: 1.0,
+            potionDropMul: 1.0
         };
     }
 
@@ -412,7 +424,8 @@ class Game {
     getCurrentSpawnDelay() {
         const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
         const director = this.getDirectorState();
-        const delay = CONFIG.WAVES.spawnDelay * waveDifficulty.spawnDelayMul * director.spawnDelayMul;
+        const debugMul = this.debugBalanceOverrides.spawnDelayMul || 1.0;
+        const delay = CONFIG.WAVES.spawnDelay * waveDifficulty.spawnDelayMul * director.spawnDelayMul * debugMul;
         return Math.max(24, Math.round(delay));
     }
 
@@ -420,7 +433,7 @@ class Game {
         const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
         const director = this.getDirectorState();
         return this.clamp(
-            waveDifficulty.potionDropMul * director.potionDropMul,
+            waveDifficulty.potionDropMul * director.potionDropMul * (this.debugBalanceOverrides.potionDropMul || 1.0),
             CONFIG.ADAPTIVE_DIFFICULTY.MIN_POTION_DROP_MUL,
             CONFIG.ADAPTIVE_DIFFICULTY.MAX_POTION_DROP_MUL
         );
@@ -638,7 +651,6 @@ class Game {
 
             // 4. Обновление врагов
             this.enemies.forEach(e => {
-                this.updateChatEnemyEffects(e);
                 e.update(alivePlayers, this.frameCount, this.particles, (amt) => this.shake(amt), this.projectiles);
                 
                 // Проверяем шипы (возврат урона)
@@ -813,11 +825,7 @@ class Game {
             '!хил': 'heal',
             '!healme': 'heal',
             '!bomb': 'bomb',
-            '!бомба': 'bomb',
-            '!slow': 'slow',
-            '!замедлить': 'slow',
-            '!rally': 'rally',
-            '!рывок': 'rally'
+            '!бомба': 'bomb'
         };
         return aliases[command] || null;
     }
@@ -900,7 +908,7 @@ class Game {
         state.charge = 0;
         state.cooldownFrames = CONFIG.CHAT_EVENTS.EFFECT_COOLDOWN_FRAMES;
         state.pendingIntents = [];
-        state.intentCounters = { heal: 0, bomb: 0, slow: 0, rally: 0 };
+        state.intentCounters = { heal: 0, bomb: 0 };
         state.lastEffect = effectType;
         state.triggeredCount++;
     }
@@ -910,13 +918,12 @@ class Game {
             this.applyChatHeal();
         } else if (effectType === 'bomb') {
             this.applyChatBomb();
-        } else if (effectType === 'slow') {
-            this.applyChatSlow();
-        } else if (effectType === 'rally') {
-            this.applyChatRally();
+        } else {
+            return false;
         }
 
         this.resetChatEventMeter(effectType);
+        return true;
     }
 
     applyChatHeal() {
@@ -974,51 +981,241 @@ class Game {
         this.addBattleLog('chat', `ЧАТ: бомба ударила по ${targets.length} врагам.`);
     }
 
-    applyChatSlow() {
-        const effect = CONFIG.CHAT_EVENTS.EFFECTS.slow;
-        const targets = this.enemies.filter(e => e.active).slice(0, effect.maxTargets);
+    debugAddChatIntents(type, count) {
+        if (this.gameState !== 'playing' || !CONFIG.CHAT_EVENTS.EFFECTS[type]) return false;
 
-        targets.forEach(e => {
-            if (!e.chatOriginalSpeed) {
-                e.chatOriginalSpeed = e.speed;
-            }
-            e.speed = Math.min(e.speed, e.chatOriginalSpeed * effect.speedMul);
-            e.chatSlowFrames = Math.max(e.chatSlowFrames || 0, effect.durationFrames);
-        });
-
-        this.particles.spawnFloatingText(this.width / 2, this.height / 2 - 80, 'ЧАТ: ЗАМЕДЛЕНИЕ!', '#3498db', true, true);
-        this.addBattleLog('chat', `ЧАТ: замедление задело ${targets.length} врагов.`);
+        for (let i = 0; i < count; i++) {
+            this.handleChatEventCommand(`Debug${type}${this.frameCount}_${i}`, type);
+        }
+        return true;
     }
 
-    applyChatRally() {
-        const effect = CONFIG.CHAT_EVENTS.EFFECTS.rally;
-        let buffedPlayers = 0;
+    debugFillChatPower(type) {
+        if (this.gameState !== 'playing' || !CONFIG.CHAT_EVENTS.EFFECTS[type]) return false;
+
+        this.chatEventState.charge = CONFIG.CHAT_EVENTS.CHARGE_MAX;
+        this.chatEventState.intentCounters = { heal: 0, bomb: 0 };
+        this.chatEventState.intentCounters[type] = Math.ceil(CONFIG.CHAT_EVENTS.CHARGE_MAX / CONFIG.CHAT_EVENTS.CHARGE_PER_MESSAGE);
+        this.chatEventState.pendingIntents = [];
+        return true;
+    }
+
+    debugTriggerChatEvent(type) {
+        if (this.gameState !== 'playing' || !CONFIG.CHAT_EVENTS.EFFECTS[type]) return false;
+        return this.applyChatEvent(type);
+    }
+
+    debugResetChatPower() {
+        this.chatEventState = this.createChatEventState();
+        return true;
+    }
+
+    debugHealTeam() {
+        if (this.players.length === 0) return false;
+
+        this.players.forEach(p => {
+            if (p.active) p.heal(p.maxHp, this.particles);
+        });
+        this.addBattleLog('chat', 'DEBUG: команда полностью исцелена.');
+        return true;
+    }
+
+    debugDamageTeam(ratio) {
+        if (this.players.length === 0) return false;
 
         this.players.forEach(p => {
             if (p.active) {
-                p.chatRallyFrames = Math.max(p.chatRallyFrames || 0, effect.durationFrames);
-                p.chatRallyDamageMul = effect.damageMul;
-                p.chatRallyDefenseFrames = Math.max(p.chatRallyDefenseFrames || 0, effect.durationFrames);
-                p.chatRallyDamageTakenMul = effect.damageTakenMul;
-                this.particles.spawnSpark(p.x + p.width / 2, p.y + p.height / 2, '#00f0ff', 5);
-                buffedPlayers++;
+                p.takeDamage(Math.max(1, Math.round(p.maxHp * ratio)), 'Debug', this.particles);
             }
         });
-
-        this.particles.spawnFloatingText(this.width / 2, this.height / 2 - 80, 'ЧАТ: РЫВОК!', '#00f0ff', true, true);
-        this.addBattleLog('chat', `ЧАТ: рывок усилил ${buffedPlayers} игроков.`);
+        this.addBattleLog('death', `DEBUG: команда получила ${Math.round(ratio * 100)}% урона.`);
+        return true;
     }
 
-    updateChatEnemyEffects(enemy) {
-        if (!enemy.chatSlowFrames) return;
+    debugKillTeam() {
+        if (this.players.length === 0) return false;
 
-        enemy.chatSlowFrames--;
-        if (enemy.chatSlowFrames <= 0) {
-            if (enemy.chatOriginalSpeed) {
-                enemy.speed = enemy.chatOriginalSpeed;
-            }
-            enemy.chatOriginalSpeed = null;
-            enemy.chatSlowFrames = 0;
+        this.players.forEach(p => {
+            p.hp = 0;
+            p.active = false;
+        });
+        this.addBattleLog('death', 'DEBUG: команда уничтожена.');
+        return true;
+    }
+
+    debugReviveTeam(ratio = CONFIG.LAST_STAND_HP_RATIO) {
+        if (this.players.length === 0) return false;
+
+        this.players.forEach((p, index) => {
+            p.active = true;
+            p.hp = Math.max(1, Math.round(p.maxHp * ratio));
+            p.kbX = 0;
+            p.kbY = 0;
+            p.vx = 0;
+            p.vy = 0;
+            const angle = (Math.PI * 2 * index) / Math.max(1, this.players.length);
+            p.x = this.width / 2 + Math.cos(angle) * 90;
+            p.y = this.height / 2 + Math.sin(angle) * 70;
+        });
+        this.addBattleLog('resurrect', `DEBUG: команда воскрешена на ${Math.round(ratio * 100)}% HP.`);
+        return true;
+    }
+
+    debugForceLastStand() {
+        if (this.gameState !== 'playing' || this.players.length === 0) return false;
+
+        this.players.forEach(p => {
+            p.hp = 0;
+            p.active = false;
+        });
+        this.lastStandRevivesUsed = 0;
+        return this.triggerLastStand();
+    }
+
+    debugSpawnEnemies(type, count) {
+        if (this.gameState !== 'playing') return false;
+
+        for (let i = 0; i < count; i++) {
+            const enemy = this.createDebugEnemy(type);
+            this.enemies.push(enemy);
+        }
+        this.addBattleLog('chat', `DEBUG: добавлено врагов: ${count}.`);
+        return true;
+    }
+
+    debugSpawnBoss() {
+        if (this.gameState !== 'playing') return false;
+
+        const difficulty = this.getDebugEnemyDifficulty();
+        const boss = new Boss(
+            this.width / 2 - 32,
+            -64,
+            Math.max(1, this.wave || 1),
+            Math.max(1, this.players.filter(p => p.active).length),
+            difficulty
+        );
+        this.applyEnemyRelicModifiers(boss);
+        this.enemies.push(boss);
+        this.addBattleLog('chat', 'DEBUG: босс добавлен.');
+        return true;
+    }
+
+    debugClearEnemies() {
+        this.enemies = [];
+        this.projectiles = this.projectiles.filter(pr => !pr.isEnemy);
+        this.addBattleLog('chat', 'DEBUG: враги очищены.');
+        return true;
+    }
+
+    debugSetBalanceOverride(key, value) {
+        if (!Object.prototype.hasOwnProperty.call(this.debugBalanceOverrides, key)) return false;
+
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) return false;
+
+        this.debugBalanceOverrides[key] = this.clamp(numericValue, 0.25, 4.0);
+        this.directorState = null;
+        return true;
+    }
+
+    debugResetBalanceOverrides() {
+        this.debugBalanceOverrides = this.createDebugBalanceOverrides();
+        this.directorState = null;
+        return true;
+    }
+
+    debugSetPotionPity() {
+        this.potionKillsSinceDrop = CONFIG.HEAL_POTION_PITY_KILLS;
+        this.addBattleLog('chat', 'DEBUG: pity-drop готов.');
+        return true;
+    }
+
+    debugForcePotionDrop() {
+        this.items.push(new HealthPotion(this.width / 2 - 7, this.height / 2 - 7));
+        this.potionKillsSinceDrop = 0;
+        this.addBattleLog('chat', 'DEBUG: зелье добавлено.');
+        return true;
+    }
+
+    debugStartNextWave() {
+        if (this.gameState !== 'playing' && this.gameState !== 'voting') return false;
+
+        this.enemies = [];
+        this.projectiles = [];
+        this.firePuddles = [];
+        this.gameState = 'playing';
+        this.startNextWave();
+        return true;
+    }
+
+    debugStartRelicVoting() {
+        if (this.gameState !== 'playing') return false;
+
+        this.enemies = [];
+        this.projectiles = [];
+        this.firePuddles = [];
+        this.waveEnemiesSpawned = this.waveEnemiesTotal;
+        this.waveInProgress = false;
+        this.startRelicVoting();
+        return true;
+    }
+
+    debugEndVotingWithOption(option = 1) {
+        if (this.gameState !== 'voting' || this.relicsToVote.length === 0) return false;
+
+        const relic = this.relicsToVote[this.clamp(option, 1, 4) - 1];
+        if (!relic) return false;
+
+        this.applyRelic(relic);
+        this.gameState = 'playing';
+        this.startNextWave();
+        return true;
+    }
+
+    getDebugEnemyDifficulty() {
+        const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
+        const director = this.getDirectorState();
+        return {
+            hpMul: waveDifficulty.hpMul * director.hpMul * (this.debugBalanceOverrides.enemyHpMul || 1.0),
+            damageMul: waveDifficulty.damageMul * director.damageMul * (this.debugBalanceOverrides.enemyDamageMul || 1.0)
+        };
+    }
+
+    createDebugEnemy(type) {
+        const validType = CONFIG.ENEMIES[type] ? type : this.chooseEnemyType(this.getDirectorState());
+        const padding = 40;
+        const side = Math.floor(Math.random() * 4);
+        let x = 0;
+        let y = 0;
+
+        if (side === 0) {
+            x = Math.random() * this.width;
+            y = -padding;
+        } else if (side === 1) {
+            x = Math.random() * this.width;
+            y = this.height + padding;
+        } else if (side === 2) {
+            x = -padding;
+            y = Math.random() * this.height;
+        } else {
+            x = this.width + padding;
+            y = Math.random() * this.height;
+        }
+
+        const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
+        const enemy = new Enemy(x, y, validType, Math.max(1, this.wave || 1), waveDifficulty.playerCountScale, this.getDebugEnemyDifficulty());
+        this.applyEnemyRelicModifiers(enemy);
+        return enemy;
+    }
+
+    applyEnemyRelicModifiers(enemy) {
+        if (!this.relicModifiers.enemies) return;
+
+        if (this.relicModifiers.enemies.speed) {
+            enemy.speed *= this.relicModifiers.enemies.speed;
+        }
+        if (this.relicModifiers.enemies.damage) {
+            enemy.damage = Math.round(enemy.damage * this.relicModifiers.enemies.damage);
         }
     }
 
@@ -1147,8 +1344,8 @@ class Game {
         const waveDifficulty = this.waveDifficulty || this.getWaveDifficultyProfile();
         const director = this.getDirectorState();
         const enemyDifficulty = {
-            hpMul: waveDifficulty.hpMul * director.hpMul,
-            damageMul: waveDifficulty.damageMul * director.damageMul
+            hpMul: waveDifficulty.hpMul * director.hpMul * (this.debugBalanceOverrides.enemyHpMul || 1.0),
+            damageMul: waveDifficulty.damageMul * director.damageMul * (this.debugBalanceOverrides.enemyDamageMul || 1.0)
         };
 
         if (isBossWave && this.waveEnemiesSpawned === 1) {

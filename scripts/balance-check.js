@@ -124,7 +124,7 @@ function runOne(classes, seed, targetWave = 10, options = {}) {
                 game.wave >= (options.chatAssist.fromWave || 1) &&
                 frame - lastChatBurstFrame >= (options.chatAssist.everyFrames || 1800)
             ) {
-                const commands = options.chatAssist.commands || ['!heal', '!bomb', '!slow', '!rally'];
+                const commands = options.chatAssist.commands || ['!heal', '!bomb'];
                 for (let i = 0; i < (options.chatAssist.viewers || 80); i++) {
                     const command = commands[i % commands.length];
                     game.handleCommand(`Chat${frame}_${i}`, command, [], '#ffffff');

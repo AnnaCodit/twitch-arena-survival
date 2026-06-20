@@ -230,18 +230,6 @@ const CONFIG = {
                 damage: 70,
                 bossDamageMul: 0.18,
                 maxTargets: 8
-            },
-            slow: {
-                label: 'SLOW',
-                durationFrames: 420,
-                speedMul: 0.65,
-                maxTargets: 40
-            },
-            rally: {
-                label: 'RALLY',
-                durationFrames: 360,
-                damageMul: 1.12,
-                damageTakenMul: 0.82
             }
         }
     },

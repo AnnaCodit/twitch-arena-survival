@@ -620,6 +620,92 @@ input[type="text"]:focus {
     box-shadow: 0 0 10px var(--color-success-glow);
 }
 
+.debug-panel {
+    position: absolute;
+    top: 88px;
+    right: 20px;
+    width: 360px;
+    max-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 12;
+}
+
+.debug-panel.hidden {
+    display: none;
+}
+
+.debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-glass);
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.debug-header .header-title {
+    font-family: var(--font-pixel);
+    font-size: 9px;
+    color: #f1c40f;
+}
+
+.debug-body {
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.debug-section {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.debug-section h4 {
+    margin-bottom: 8px;
+    font-family: var(--font-pixel);
+    font-size: 8px;
+    color: var(--color-accent);
+}
+
+.debug-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.debug-grid .btn {
+    padding: 7px 4px;
+    font-size: 9px;
+    border-radius: 4px;
+}
+
+.debug-section label {
+    display: grid;
+    grid-template-columns: 1fr 84px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.debug-section input {
+    width: 100%;
+    padding: 5px 7px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+body.obs-mode #debug-panel {
+    display: none !important;
+}
+
 
 /* ==========================================================================
    5. ЭКРАН РЕЗУЛЬТАТОВ (Game Over)

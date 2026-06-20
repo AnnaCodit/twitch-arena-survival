@@ -83,6 +83,8 @@ const Game = require('../src/game.js');
 const game = new Game('game-canvas');
 game.twitch.parseGameCommand('ParserUser', '!heal', '#ffffff');
 assert.strictEqual(game.chatEventState.ignoredIntents, 1);
+assert.strictEqual(game.getChatEventType('!slow'), null);
+assert.strictEqual(game.getChatEventType('!rally'), null);
 
 game.handleCommand('Alice', '!join', ['mage'], '#ffffff');
 assert.strictEqual(game.lobbyUsers.get('Alice'), 'mage');
@@ -129,6 +131,17 @@ for (let frame = 0; frame < 20; frame++) {
 assert.strictEqual(game.chatEventState.triggeredCount, 1);
 assert.ok(game.chatEventState.charge > 0);
 
+game.debugResetChatPower();
+assert.strictEqual(game.chatEventState.charge, 0);
+assert.strictEqual(game.chatEventState.cooldownFrames, 0);
+assert.strictEqual(game.debugFillChatPower('bomb'), true);
+assert.strictEqual(game.chatEventState.charge, CONFIG.CHAT_EVENTS.CHARGE_MAX);
+assert.strictEqual(game.debugTriggerChatEvent('bomb'), true);
+assert.strictEqual(game.chatEventState.lastEffect, 'bomb');
+assert.ok(game.chatEventState.cooldownFrames > 0);
+game.debugResetChatPower();
+assert.strictEqual(game.chatEventState.lastEffect, null);
+
 game.startRelicVoting();
 game.handleCommand('Alice', '4', [], '#ffffff');
 assert.strictEqual(game.relicVotes[4], 1);
@@ -143,13 +156,16 @@ game.update();
 assert.strictEqual(game.gameState, 'playing');
 assert.strictEqual(game.lastStandRevivesUsed, 1);
 assert.ok(game.players.every(player => player.active && player.hp > 0));
-const protectedPlayer = game.players[0];
-const lastStandFrames = protectedPlayer.damageReductionFrames;
-const lastStandMul = protectedPlayer.damageTakenMul;
-game.applyChatRally();
-assert.strictEqual(protectedPlayer.damageReductionFrames, lastStandFrames);
-assert.strictEqual(protectedPlayer.damageTakenMul, lastStandMul);
-assert.ok(protectedPlayer.chatRallyDefenseFrames > 0);
+assert.strictEqual(game.debugSetBalanceOverride('enemyHpMul', 1.5), true);
+assert.strictEqual(game.debugBalanceOverrides.enemyHpMul, 1.5);
+assert.strictEqual(game.debugResetBalanceOverrides(), true);
+assert.strictEqual(game.debugBalanceOverrides.enemyHpMul, 1.0);
+const totalBeforeDebugSpawn = game.waveEnemiesSpawned;
+assert.strictEqual(game.debugSpawnEnemies('slime', 2), true);
+assert.ok(game.enemies.length >= 2);
+assert.strictEqual(game.waveEnemiesSpawned, totalBeforeDebugSpawn);
+assert.strictEqual(game.debugClearEnemies(), true);
+assert.strictEqual(game.enemies.length, 0);
 
 game.players.forEach(player => {
     player.active = false;

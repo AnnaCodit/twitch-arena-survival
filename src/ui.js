@@ -73,6 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSim10Join = document.getElementById('btn-sim-10-join');
     const btnSimVotes = document.getElementById('btn-sim-votes');
     const btnAutoChat = document.getElementById('btn-auto-chat');
+    const debugPanel = document.getElementById('debug-panel');
+    const btnDebugClose = document.getElementById('btn-debug-close');
+    const debugHpMul = document.getElementById('debug-hp-mul');
+    const debugDamageMul = document.getElementById('debug-damage-mul');
+    const debugSpawnMul = document.getElementById('debug-spawn-mul');
+    const debugPotionMul = document.getElementById('debug-potion-mul');
 
     // Результаты игры (Game Over)
     const statWave = document.getElementById('stat-wave');
@@ -123,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Скрываем/показываем оверлеи в зависимости от режима OBS
             if (document.body.classList.contains('obs-mode')) {
+                setDebugPanelVisible(false);
                 // В OBS режиме скрываем все лишнее, кроме канваса
             }
         } else if (game.gameState === 'gameover') {
@@ -197,6 +204,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 screens[key].classList.add('hidden');
             }
         });
+
+        if (screenKey !== 'game') {
+            setDebugPanelVisible(false);
+        }
     }
 
     // По умолчанию показываем лобби
@@ -375,6 +386,77 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function setDebugPanelVisible(isVisible) {
+        if (!debugPanel) return;
+        if (document.body.classList.contains('obs-mode')) {
+            debugPanel.classList.add('hidden');
+            return;
+        }
+        debugPanel.classList.toggle('hidden', !isVisible);
+    }
+
+    function logDebugResult(label, success) {
+        const color = success ? '#2ecc71' : '#f1c40f';
+        const status = success ? 'OK' : 'SKIPPED';
+        game.twitch.onLogCallback('DEBUG', `${label}: ${status}`, color, true);
+    }
+
+    function runDebugAction(label, action) {
+        logDebugResult(label, Boolean(action()));
+    }
+
+    function bindDebugButton(id, label, action) {
+        const button = document.getElementById(id);
+        if (!button) return;
+        button.addEventListener('click', () => runDebugAction(label, action));
+    }
+
+    function syncDebugBalanceInputs() {
+        if (!game.debugBalanceOverrides) return;
+        debugHpMul.value = game.debugBalanceOverrides.enemyHpMul;
+        debugDamageMul.value = game.debugBalanceOverrides.enemyDamageMul;
+        debugSpawnMul.value = game.debugBalanceOverrides.spawnDelayMul;
+        debugPotionMul.value = game.debugBalanceOverrides.potionDropMul;
+    }
+
+    if (btnDebugClose) {
+        btnDebugClose.addEventListener('click', () => setDebugPanelVisible(false));
+    }
+
+    bindDebugButton('debug-chat-heal-25', '+25 HEAL', () => game.debugAddChatIntents('heal', 25));
+    bindDebugButton('debug-chat-bomb-25', '+25 BOMB', () => game.debugAddChatIntents('bomb', 25));
+    bindDebugButton('debug-fill-heal', 'Fill HEAL', () => game.debugFillChatPower('heal'));
+    bindDebugButton('debug-fill-bomb', 'Fill BOMB', () => game.debugFillChatPower('bomb'));
+    bindDebugButton('debug-trigger-heal', 'Trigger HEAL', () => game.debugTriggerChatEvent('heal'));
+    bindDebugButton('debug-trigger-bomb', 'Trigger BOMB', () => game.debugTriggerChatEvent('bomb'));
+    bindDebugButton('debug-reset-chat', 'Reset Chat Power', () => game.debugResetChatPower());
+    bindDebugButton('debug-heal-team', 'Full heal team', () => game.debugHealTeam());
+    bindDebugButton('debug-damage-team', 'Damage team', () => game.debugDamageTeam(0.25));
+    bindDebugButton('debug-kill-team', 'Kill team', () => game.debugKillTeam());
+    bindDebugButton('debug-revive-team', 'Revive team', () => game.debugReviveTeam(0.35));
+    bindDebugButton('debug-last-stand', 'Force Last Stand', () => game.debugForceLastStand());
+    bindDebugButton('debug-spawn-enemy', 'Spawn enemy', () => game.debugSpawnEnemies('slime', 1));
+    bindDebugButton('debug-spawn-10', 'Spawn 10 enemies', () => game.debugSpawnEnemies('slime', 10));
+    bindDebugButton('debug-spawn-boss', 'Spawn boss', () => game.debugSpawnBoss());
+    bindDebugButton('debug-clear-enemies', 'Clear enemies', () => game.debugClearEnemies());
+    bindDebugButton('debug-next-wave', 'Next wave', () => game.debugStartNextWave());
+    bindDebugButton('debug-start-vote', 'Start voting', () => game.debugStartRelicVoting());
+    bindDebugButton('debug-pick-relic', 'Pick relic 1', () => game.debugEndVotingWithOption(1));
+    bindDebugButton('debug-pity', 'Potion pity ready', () => game.debugSetPotionPity());
+    bindDebugButton('debug-drop-potion', 'Drop potion', () => game.debugForcePotionDrop());
+    bindDebugButton('debug-apply-balance', 'Apply balance overrides', () => {
+        return game.debugSetBalanceOverride('enemyHpMul', debugHpMul.value) &&
+            game.debugSetBalanceOverride('enemyDamageMul', debugDamageMul.value) &&
+            game.debugSetBalanceOverride('spawnDelayMul', debugSpawnMul.value) &&
+            game.debugSetBalanceOverride('potionDropMul', debugPotionMul.value);
+    });
+    bindDebugButton('debug-reset-balance', 'Reset balance overrides', () => {
+        const success = game.debugResetBalanceOverrides();
+        syncDebugBalanceInputs();
+        return success;
+    });
+    syncDebugBalanceInputs();
+
 
     // -------------------------------------------------------------
     // 5. ЭКРАН КОНЦА ИГРЫ (Game Over)
@@ -387,14 +469,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Горячие клавиши для OBS / Оверлей режима
     document.addEventListener('keydown', (e) => {
+        const targetTag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
+        if (targetTag === 'input' || targetTag === 'textarea') return;
         // Клавиша O (английская) переключает OBS режим
         if (e.key.toLowerCase() === 'o') {
             document.body.classList.toggle('obs-mode');
+            if (document.body.classList.contains('obs-mode')) {
+                setDebugPanelVisible(false);
+            }
             if (document.body.classList.contains('obs-mode')) {
                 console.log("OBS Режим активирован: Управление скрыто, фон прозрачный.");
             } else {
                 console.log("OBS Режим деактивирован.");
             }
+        } else if (e.key.toLowerCase() === 'd') {
+            if (game.gameState !== 'playing' && game.gameState !== 'voting') return;
+            const isVisible = debugPanel && !debugPanel.classList.contains('hidden');
+            setDebugPanelVisible(!isVisible);
         }
     });
 

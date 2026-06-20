@@ -52,7 +52,7 @@
                 <ul>
                     <li><span>!join / !войти / !играть [класс]</span> — войти в игру (воин, маг, лучник, хилер/клирик)</li>
                     <li><span>!class / !класс [класс]</span> — сменить класс на следующую волну</li>
-                    <li><span>!heal / !bomb / !slow / !rally</span> — зарядить общий эффект чата</li>
+                    <li><span>!heal / !bomb</span> — зарядить общий эффект чата</li>
                     <li><span>1 / 2 / 3 / 4</span> — проголосовать за реликвию (просто цифра в чат)</li>
                 </ul>
             </div>
@@ -114,6 +114,72 @@
             </div>
         </div>
         
+        <!-- Debug Sandbox: локальные инструменты проверки без участия зрителей -->
+        <div id="debug-panel" class="debug-panel glass hidden">
+            <div class="debug-header">
+                <span class="header-title">DEBUG SANDBOX</span>
+                <button id="btn-debug-close" class="btn-toggle">_</button>
+            </div>
+            <div class="debug-body">
+                <div class="debug-section">
+                    <h4>Chat Power</h4>
+                    <div class="debug-grid">
+                        <button id="debug-chat-heal-25" class="btn btn-sm btn-secondary">+25 HEAL</button>
+                        <button id="debug-chat-bomb-25" class="btn btn-sm btn-secondary">+25 BOMB</button>
+                        <button id="debug-fill-heal" class="btn btn-sm btn-secondary">FILL HEAL</button>
+                        <button id="debug-fill-bomb" class="btn btn-sm btn-secondary">FILL BOMB</button>
+                        <button id="debug-trigger-heal" class="btn btn-sm btn-accent">TRIGGER HEAL</button>
+                        <button id="debug-trigger-bomb" class="btn btn-sm btn-accent">TRIGGER BOMB</button>
+                        <button id="debug-reset-chat" class="btn btn-sm btn-secondary">RESET CHAT</button>
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <h4>Team</h4>
+                    <div class="debug-grid">
+                        <button id="debug-heal-team" class="btn btn-sm btn-secondary">FULL HEAL</button>
+                        <button id="debug-damage-team" class="btn btn-sm btn-secondary">DAMAGE 25%</button>
+                        <button id="debug-kill-team" class="btn btn-sm btn-secondary">KILL TEAM</button>
+                        <button id="debug-revive-team" class="btn btn-sm btn-secondary">REVIVE 35%</button>
+                        <button id="debug-last-stand" class="btn btn-sm btn-accent">LAST STAND</button>
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <h4>Enemies</h4>
+                    <div class="debug-grid">
+                        <button id="debug-spawn-enemy" class="btn btn-sm btn-secondary">SPAWN 1</button>
+                        <button id="debug-spawn-10" class="btn btn-sm btn-secondary">SPAWN 10</button>
+                        <button id="debug-spawn-boss" class="btn btn-sm btn-accent">SPAWN BOSS</button>
+                        <button id="debug-clear-enemies" class="btn btn-sm btn-secondary">CLEAR</button>
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <h4>Wave</h4>
+                    <div class="debug-grid">
+                        <button id="debug-next-wave" class="btn btn-sm btn-secondary">NEXT WAVE</button>
+                        <button id="debug-start-vote" class="btn btn-sm btn-secondary">VOTING</button>
+                        <button id="debug-pick-relic" class="btn btn-sm btn-accent">PICK 1</button>
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <h4>Balance</h4>
+                    <label>Enemy HP <input id="debug-hp-mul" type="number" min="0.25" max="4" step="0.05" value="1"></label>
+                    <label>Enemy DMG <input id="debug-damage-mul" type="number" min="0.25" max="4" step="0.05" value="1"></label>
+                    <label>Spawn Delay <input id="debug-spawn-mul" type="number" min="0.25" max="4" step="0.05" value="1"></label>
+                    <label>Potion Drop <input id="debug-potion-mul" type="number" min="0.25" max="4" step="0.05" value="1"></label>
+                    <div class="debug-grid">
+                        <button id="debug-apply-balance" class="btn btn-sm btn-accent">APPLY</button>
+                        <button id="debug-reset-balance" class="btn btn-sm btn-secondary">RESET</button>
+                        <button id="debug-pity" class="btn btn-sm btn-secondary">PITY READY</button>
+                        <button id="debug-drop-potion" class="btn btn-sm btn-secondary">DROP POTION</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Подсказка по OBS режиму во время игры -->
         <div class="hud-obs-hint">OBS режим: Клавиша [O]</div>
     </div>

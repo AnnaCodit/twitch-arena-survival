@@ -210,10 +210,6 @@ class Player extends Entity {
         this.puddleDurationAdd = 0;
         this.damageReductionFrames = 0;
         this.damageTakenMul = 1.0;
-        this.chatRallyFrames = 0;
-        this.chatRallyDamageMul = 1.0;
-        this.chatRallyDefenseFrames = 0;
-        this.chatRallyDamageTakenMul = 1.0;
 
         // Перезарядка воскрешения целителя (20 секунд = 1200 кадров)
         this.lastResurrectFrame = -1200;
@@ -282,8 +278,6 @@ class Player extends Entity {
         let incomingAmount = amount;
         if (this.damageReductionFrames > 0) {
             incomingAmount *= this.damageTakenMul;
-        } else if (this.chatRallyDefenseFrames > 0) {
-            incomingAmount *= this.chatRallyDamageTakenMul;
         }
 
         if (this.classType === 'warrior') {
@@ -356,19 +350,6 @@ class Player extends Entity {
                 this.damageTakenMul = 1.0;
             }
         }
-        if (this.chatRallyFrames > 0) {
-            this.chatRallyFrames--;
-            if (this.chatRallyFrames <= 0) {
-                this.chatRallyDamageMul = 1.0;
-            }
-        }
-        if (this.chatRallyDefenseFrames > 0) {
-            this.chatRallyDefenseFrames--;
-            if (this.chatRallyDefenseFrames <= 0) {
-                this.chatRallyDamageTakenMul = 1.0;
-            }
-        }
-
         if (this.currentTarget && !this.currentTarget.active) {
             this.currentTarget = null;
         }
@@ -690,10 +671,6 @@ class Player extends Entity {
             const lostHpPercent = (this.maxHp - this.hp) / this.maxHp;
             finalDamage = Math.round(finalDamage * (1 + lostHpPercent)); // До +100% урона при смерти
         }
-        if (this.chatRallyFrames > 0) {
-            finalDamage = Math.round(finalDamage * (this.chatRallyDamageMul || 1.0));
-        }
-
         if (this.classType === 'warrior') {
             // Воин машет мечом (АОЕ ближнего боя по конусу/полукругу перед собой)
             const weaponX = this.x + this.width / 2 + this.direction * 15;
